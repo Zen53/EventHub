@@ -16,6 +16,9 @@ export class RefreshTokensRepository {
       .insert(refreshTokens)
       .values(values)
       .returning();
+    if (!row) {
+      throw new Error('Refresh token insert returned no row');
+    }
     return row;
   }
 

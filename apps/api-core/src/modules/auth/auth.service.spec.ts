@@ -82,20 +82,23 @@ describe('AuthService.login', () => {
     expect(refreshTokens.issue).toHaveBeenCalledWith(row.id);
   });
 
-  async function loginError(service: AuthService, password: string) {
-    return service
-      .login({ ...credentials, password })
-      .catch((error: unknown) => error);
-  }
+  const loginError = (service: AuthService, email: string, password: string) =>
+    service.login({ email, password }).catch((error: unknown) => error);
 
   it('throws the same 401 INVALID_CREDENTIALS for a wrong password and an unknown email', async () => {
     const { service, users, accessTokens, refreshTokens } = setup();
     users.verifyCredentials.mockResolvedValue(null);
 
-    const wrongPassword = await loginError(service, 'mauvais');
-    const unknownEmail = await service
-      .login({ email: 'inconnu@exemple.fr', password: 'motdepasse123' })
-      .catch((error: unknown) => error);
+    const wrongPassword = await loginError(
+      service,
+      'camille@exemple.fr',
+      'mauvais',
+    );
+    const unknownEmail = await loginError(
+      service,
+      'inconnu@exemple.fr',
+      'motdepasse123',
+    );
 
     expect(wrongPassword).toBeInstanceOf(AppError);
     expect(wrongPassword).toMatchObject({
