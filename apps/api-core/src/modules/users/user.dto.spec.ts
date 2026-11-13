@@ -1,5 +1,5 @@
 import { userSchema } from '@eventhub/schemas';
-import { toUserResponse } from './user-response.js';
+import { toUserResponse } from './user.dto.js';
 import type { UserRow } from './users.schema.js';
 
 const row: UserRow = {
