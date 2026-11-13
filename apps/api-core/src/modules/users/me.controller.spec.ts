@@ -4,6 +4,7 @@ import { Reflector } from '@nestjs/core';
 import { AppError } from '../../core/errors/app-error.js';
 import { IS_PUBLIC_KEY } from '../../core/security/public.decorator.js';
 import { MeController } from './me.controller.js';
+import { UsersModule } from './users.module.js';
 import type { UserRow } from './users.schema.js';
 import type { UsersService } from './users.service.js';
 
@@ -72,6 +73,10 @@ describe('MeController routing', () => {
     expect(reflector.get('path', MeController)).toBe('me');
     expect(reflector.get('path', handler)).toBe('/');
     expect(reflector.get('method', handler)).toBe(RequestMethod.GET);
+  });
+
+  it('is registered in UsersModule', () => {
+    expect(reflector.get('controllers', UsersModule)).toContain(MeController);
   });
 
   it('is not public, neither on the class nor on the handler', () => {

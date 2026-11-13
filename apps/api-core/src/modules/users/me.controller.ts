@@ -1,5 +1,5 @@
 import type { User } from '@eventhub/schemas';
-import { Controller, Get, HttpCode } from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
 import { AppError } from '../../core/errors/app-error.js';
 import {
   type AuthenticatedUser,
@@ -13,7 +13,6 @@ export class MeController {
   constructor(private readonly users: UsersService) {}
 
   @Get()
-  @HttpCode(200)
   async getMe(@CurrentUser() { userId }: AuthenticatedUser): Promise<User> {
     const row = await this.users.findById(userId);
     if (!row) {
