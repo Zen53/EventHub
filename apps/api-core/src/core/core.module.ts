@@ -6,7 +6,9 @@ import { AllExceptionsFilter } from './errors/all-exceptions.filter.js';
 import { createValidationPipe } from './validation/validation.pipe.js';
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true, validationSchema: envSchema })],
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true, validationSchema: envSchema }),
+  ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_PIPE, useFactory: createValidationPipe },

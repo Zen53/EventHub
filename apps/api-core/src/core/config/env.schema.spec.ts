@@ -9,13 +9,18 @@ describe('envSchema', () => {
   });
 
   it('applies defaults when NODE_ENV and PORT are missing', () => {
-    expect(envSchema.parse({})).toEqual({ NODE_ENV: 'development', PORT: 3000 });
+    expect(envSchema.parse({})).toEqual({
+      NODE_ENV: 'development',
+      PORT: 3000,
+    });
   });
 
-  it.each([{ NODE_ENV: 'staging' }, { PORT: 'abc' }, { PORT: '0' }, { PORT: '70000' }])(
-    'rejects %o',
-    (env) => {
-      expect(envSchema.safeParse(env).success).toBe(false);
-    },
-  );
+  it.each([
+    { NODE_ENV: 'staging' },
+    { PORT: 'abc' },
+    { PORT: '0' },
+    { PORT: '70000' },
+  ])('rejects %o', (env) => {
+    expect(envSchema.safeParse(env).success).toBe(false);
+  });
 });

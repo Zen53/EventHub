@@ -13,22 +13,35 @@ export interface ErrorBody {
   error: { code: string; message: string; details: unknown };
 }
 
-const INTERNAL_ERROR = {
-  status: HttpStatus.INTERNAL_SERVER_ERROR,
-  body: { error: { code: 'INTERNAL_ERROR', message: 'Internal server error', details: null } },
-};
-
-export function toErrorResponse(exception: unknown): { status: number; body: ErrorBody } {
+export function toErrorResponse(exception: unknown): {
+  status: number;
+  body: ErrorBody;
+} {
   if (exception instanceof AppError) {
     const { status, code, message, details } = exception;
-    return { status, body: { error: { code, message, details: details ?? null } } };
+    return {
+      status,
+      body: { error: { code, message, details: details ?? null } },
+    };
   }
   if (exception instanceof HttpException && exception.getStatus() < 500) {
     const status = exception.getStatus();
     const code = (HttpStatus[status] as string | undefined) ?? 'HTTP_ERROR';
-    return { status, body: { error: { code, message: exception.message, details: null } } };
+    // An HttpException built from an Error would carry that error's internal message.
+    const message =
+      exception.getResponse() instanceof Error ? code : exception.message;
+    return { status, body: { error: { code, message, details: null } } };
   }
-  return INTERNAL_ERROR;
+  return {
+    status: HttpStatus.INTERNAL_SERVER_ERROR,
+    body: {
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Internal server error',
+        details: null,
+      },
+    },
+  };
 }
 
 @Catch()
