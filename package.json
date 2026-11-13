@@ -10,7 +10,9 @@
     "dev:schemas": "cd packages/schemas && pnpm dev",
     "start:api": "cd apps/api-core && pnpm start:dev",
     "start:web": "cd apps/web && pnpm dev",
+    "test": "pnpm test:schemas && pnpm test:api",
     "test:api": "cd apps/api-core && pnpm test",
+    "test:schemas": "cd packages/schemas && pnpm test",
     "lint:api": "cd apps/api-core && pnpm lint",
     "lint:web": "cd apps/web && pnpm lint"
   }

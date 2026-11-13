@@ -16,13 +16,15 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
-    "prepare": "tsc -p tsconfig.json"
+    "prepare": "tsc -p tsconfig.json",
+    "test": "vitest run"
   },
   "peerDependencies": {
     "zod": "^4.0.0"
   },
   "devDependencies": {
     "typescript": "^6.0.2",
+    "vitest": "^4.1.12",
     "zod": "^4.6.7"
   }
 }
