@@ -78,48 +78,22 @@ describe('UsersService.create', () => {
     );
   });
 
-  const emailConflict = () =>
-    Object.assign(new Error('dup'), {
-      code: '23505',
-      constraint_name: 'users_email_unique',
-    });
-
-  it.each([
-    ['the postgres error', emailConflict()],
-    [
-      'a Drizzle error wrapping it',
-      new Error('Failed query', { cause: emailConflict() }),
-    ],
-  ])(
-    'turns a unique violation on the email (%s) into 409 EMAIL_ALREADY_USED',
-    async (_, error) => {
-      const { service, repository } = setup();
-      repository.insert.mockRejectedValue(error);
-
-      const promise = service.create(input);
-
-      await expect(promise).rejects.toBeInstanceOf(AppError);
-      await expect(promise).rejects.toMatchObject({
-        status: 409,
-        code: 'EMAIL_ALREADY_USED',
-      });
-    },
-  );
-
-  it('rethrows a unique violation on another constraint as is', async () => {
+  it('throws 409 EMAIL_ALREADY_USED when the email is already taken', async () => {
     const { service, repository } = setup();
-    const error = Object.assign(new Error('dup'), {
-      code: '23505',
-      constraint_name: 'users_pkey',
-    });
-    repository.insert.mockRejectedValue(error);
+    repository.insert.mockResolvedValue(null);
 
-    await expect(service.create(input)).rejects.toBe(error);
+    const promise = service.create(input);
+
+    await expect(promise).rejects.toBeInstanceOf(AppError);
+    await expect(promise).rejects.toMatchObject({
+      status: 409,
+      code: 'EMAIL_ALREADY_USED',
+    });
   });
 
   it('rethrows any other error as is', async () => {
     const { service, repository } = setup();
-    const error = Object.assign(new Error('boom'), { code: '08006' });
+    const error = new Error('boom');
     repository.insert.mockRejectedValue(error);
 
     await expect(service.create(input)).rejects.toBe(error);

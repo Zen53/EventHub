@@ -3,7 +3,7 @@ import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { AppError } from '../../core/errors/app-error.js';
 import { PasswordHasher } from './password-hasher.js';
 import { UsersRepository } from './users.repository.js';
-import { USERS_EMAIL_UNIQUE, type UserRow } from './users.schema.js';
+import type { UserRow } from './users.schema.js';
 
 export interface CreateUserInput {
   email: string;
@@ -11,19 +11,6 @@ export interface CreateUserInput {
   firstName: string;
   lastName: string;
   phone?: string | null;
-}
-
-const UNIQUE_VIOLATION = '23505';
-
-function isEmailUniqueViolation(error: unknown): boolean {
-  const pgError =
-    error instanceof Error && error.cause !== undefined ? error.cause : error;
-  if (typeof pgError !== 'object' || pgError === null) return false;
-  const { code, constraint_name } = pgError as {
-    code?: unknown;
-    constraint_name?: unknown;
-  };
-  return code === UNIQUE_VIOLATION && constraint_name === USERS_EMAIL_UNIQUE;
 }
 
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
@@ -43,24 +30,21 @@ export class UsersService implements OnModuleInit {
 
   async create(input: CreateUserInput): Promise<UserRow> {
     const passwordHash = await this.hasher.hash(input.password);
-    try {
-      return await this.repository.insert({
-        email: normalizeEmail(input.email),
-        firstName: input.firstName,
-        lastName: input.lastName,
-        phone: input.phone ?? null,
-        passwordHash,
-      });
-    } catch (error) {
-      if (isEmailUniqueViolation(error)) {
-        throw new AppError(
-          409,
-          'EMAIL_ALREADY_USED',
-          'Cet email est déjà associé à un compte.',
-        );
-      }
-      throw error;
+    const row = await this.repository.insert({
+      email: normalizeEmail(input.email),
+      firstName: input.firstName,
+      lastName: input.lastName,
+      phone: input.phone ?? null,
+      passwordHash,
+    });
+    if (!row) {
+      throw new AppError(
+        409,
+        'EMAIL_ALREADY_USED',
+        'Cet email est déjà associé à un compte.',
+      );
     }
+    return row;
   }
 
   findById(id: string): Promise<UserRow | null> {

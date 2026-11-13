@@ -7,9 +7,13 @@ import { type NewUserRow, type UserRow, users } from './users.schema.js';
 export class UsersRepository {
   constructor(@InjectDatabase() private readonly db: Database) {}
 
-  async insert(values: NewUserRow): Promise<UserRow> {
-    const [row] = await this.db.insert(users).values(values).returning();
-    return row;
+  async insert(values: NewUserRow): Promise<UserRow | null> {
+    const [row] = await this.db
+      .insert(users)
+      .values(values)
+      .onConflictDoNothing({ target: users.email })
+      .returning();
+    return row ?? null;
   }
 
   async findByEmail(email: string): Promise<UserRow | null> {
