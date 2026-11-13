@@ -169,7 +169,6 @@ describe('UsersService.verifyCredentials', () => {
     ).resolves.toBeNull();
     expect(hasher.verify).toHaveBeenCalledWith('hashed', 'motdepasse123');
 
-    // The dummy hash is computed once, then reused.
     await service.verifyCredentials('autre@exemple.fr', 'motdepasse123');
     expect(hasher.hash).toHaveBeenCalledTimes(1);
     expect(hasher.verify).toHaveBeenCalledTimes(2);

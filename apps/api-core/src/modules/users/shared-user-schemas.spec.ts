@@ -6,7 +6,6 @@ import {
   userSchema,
 } from '@eventhub/schemas';
 
-// The shared package has no test runner: its user schemas are tested here, where they are consumed.
 describe('shared user schemas', () => {
   describe('emailSchema', () => {
     it('accepts a valid email and lowercases it', () => {

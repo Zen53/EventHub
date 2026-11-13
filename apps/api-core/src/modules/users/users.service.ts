@@ -15,7 +15,6 @@ export interface CreateUserInput {
 
 const UNIQUE_VIOLATION = '23505';
 
-// Drizzle wraps the postgres.js error in a DrizzleQueryError, whose `cause` carries the SQLSTATE code.
 function isEmailUniqueViolation(error: unknown): boolean {
   const pgError =
     error instanceof Error && error.cause !== undefined ? error.cause : error;
@@ -38,7 +37,6 @@ export class UsersService implements OnModuleInit {
     private readonly hasher: PasswordHasher,
   ) {}
 
-  // Computed at startup, so the first unknown-email login is not slower than the others.
   async onModuleInit(): Promise<void> {
     await this.getDummyHash();
   }
@@ -54,7 +52,6 @@ export class UsersService implements OnModuleInit {
         passwordHash,
       });
     } catch (error) {
-      // The unique index decides, so two simultaneous sign-ups with the same email cannot both pass.
       if (isEmailUniqueViolation(error)) {
         throw new AppError(
           409,
@@ -70,14 +67,12 @@ export class UsersService implements OnModuleInit {
     return this.repository.findById(id);
   }
 
-  /** Returns the user, or null without telling whether the email or the password is wrong. */
   async verifyCredentials(
     email: string,
     password: string,
   ): Promise<UserRow | null> {
     const user = await this.repository.findByEmail(normalizeEmail(email));
     if (!user) {
-      // Hash comparison anyway, so the response time does not reveal whether the account exists.
       await this.hasher.verify(await this.getDummyHash(), password);
       return null;
     }
@@ -86,7 +81,6 @@ export class UsersService implements OnModuleInit {
   }
 
   private getDummyHash(): Promise<string> {
-    // A failed attempt is not cached, so the next call tries again.
     this.dummyHash ??= this.hasher.hash(randomUUID()).catch((error) => {
       this.dummyHash = undefined;
       throw error;

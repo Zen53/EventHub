@@ -7,7 +7,6 @@ export const users = pgTable('users', {
   email: varchar('email', { length: 254 }).notNull().unique(USERS_EMAIL_UNIQUE),
   firstName: varchar('first_name', { length: 50 }).notNull(),
   lastName: varchar('last_name', { length: 50 }).notNull(),
-  // E.164: "+" followed by 15 digits at most.
   phone: varchar('phone', { length: 16 }),
   passwordHash: text('password_hash').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true })
