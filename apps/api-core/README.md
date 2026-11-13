@@ -28,36 +28,37 @@
 ## Project setup
 
 ```bash
-$ npm install
+$ pnpm install
 ```
 
-Copy `.env.example` to `.env` (`cp .env.example .env`), then run `npm run start:dev`.
+Requires Node 22.12 or later (Node 24 recommended) and pnpm.
+Copy `.env.example` to `.env` (`cp .env.example .env`), then run `pnpm start:dev`.
 The app refuses to start when a variable of `src/core/config/env.schema.ts` is missing or invalid.
 
 ## Compile and run the project
 
 ```bash
 # development
-$ npm run start
+$ pnpm run start
 
 # watch mode
-$ npm run start:dev
+$ pnpm run start:dev
 
 # production mode
-$ npm run start:prod
+$ pnpm run start:prod
 ```
 
 ## Run tests
 
 ```bash
 # unit tests
-$ npm run test
+$ pnpm run test
 
 # e2e tests
-$ npm run test:e2e
+$ pnpm run test:e2e
 
 # test coverage
-$ npm run test:cov
+$ pnpm run test:cov
 ```
 
 ## Deployment
@@ -67,7 +68,7 @@ When you're ready to deploy your NestJS application to production, there are som
 If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
 
 ```bash
-$ npm install -g @nestjs/mau
+$ pnpm add -g @nestjs/mau
 $ mau deploy
 ```
 
