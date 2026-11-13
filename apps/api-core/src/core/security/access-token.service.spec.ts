@@ -16,7 +16,6 @@ const serviceWith = (secret: string) =>
 const base64url = (value: object) =>
   Buffer.from(JSON.stringify(value)).toString('base64url');
 
-/** A token for the same secret, issuer and audience, with hand-made header and claims. */
 const handMade = (header: object, claims: object, hash = 'sha256') => {
   const signingInput = `${base64url(header)}.${base64url(claims)}`;
   const signature = createHmac(hash, SECRET)

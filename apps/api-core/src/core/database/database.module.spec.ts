@@ -31,7 +31,6 @@ class Consumer {
 describe('DatabaseModule', () => {
   const originalUrl = process.env.DATABASE_URL;
 
-  // Required by envSchema, unrelated to the database.
   beforeEach(() => {
     vi.stubEnv('JWT_ACCESS_SECRET', 'test-only-access-secret-of-32-chars!');
   });

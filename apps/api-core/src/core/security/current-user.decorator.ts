@@ -10,7 +10,6 @@ export function currentUserFactory(
 ): AuthenticatedUser {
   const { user } = context.switchToHttp().getRequest<AuthenticatedRequest>();
   if (!user) {
-    // Only reachable on a `@Public()` route: a programming error, not a client one.
     throw new Error(
       '@CurrentUser() used on a route without an authenticated user',
     );
@@ -18,5 +17,4 @@ export function currentUserFactory(
   return user;
 }
 
-/** Injects `{ userId }` of the caller, attached by `AccessTokenGuard`. */
 export const CurrentUser = createParamDecorator(currentUserFactory);

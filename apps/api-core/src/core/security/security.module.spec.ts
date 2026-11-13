@@ -7,7 +7,6 @@ import { AccessTokenGuard } from './access-token.guard.js';
 import { AccessTokenService } from './access-token.service.js';
 import { SecurityModule } from './security.module.js';
 
-// A feature module that does not import SecurityModule, as auth's login will.
 @Injectable()
 class Login {
   constructor(readonly accessTokens: AccessTokenService) {}

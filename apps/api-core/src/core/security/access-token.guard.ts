@@ -11,7 +11,6 @@ import { IS_PUBLIC_KEY } from './public.decorator.js';
 
 const BEARER = /^Bearer ([A-Za-z0-9\-_.]+)$/i;
 
-/** Global guard: every route needs a valid access token unless marked `@Public()`. */
 @Injectable()
 export class AccessTokenGuard implements CanActivate {
   constructor(
