@@ -33,7 +33,7 @@ $ npm install
 
 ## Compile and run the project
 
-Local database: copy `.env.example` to `.env` and set your values, then `docker compose up -d` and `npm run db:migrate`.
+Local database: copy `.env.example` to `.env` and set your values, then `docker compose up -d` and, once `drizzle/` holds migrations (`npm run db:generate`), `npm run db:migrate`.
 
 ```bash
 # development

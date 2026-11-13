@@ -11,5 +11,10 @@ export default defineConfig({
   dialect: 'postgresql',
   schema: './src/modules/**/*.schema.ts',
   out: './drizzle',
-  dbCredentials: { url: parseDatabaseConfig(process.env).url },
+  // Validated only when a command reads it (migrate, push, studio), so `generate` needs no database.
+  dbCredentials: {
+    get url() {
+      return parseDatabaseConfig(process.env).url;
+    },
+  },
 });

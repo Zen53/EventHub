@@ -9,7 +9,7 @@ import * as schema from './schema.js';
 @Global()
 @Module({
   imports: [
-    DrizzleModule.forRootAsync({
+    DrizzleModule.forRootAsync<typeof drizzle>({
       imports: [ConfigModule.forFeature(databaseConfig)],
       inject: [databaseConfig.KEY],
       useFactory: (config: ConfigType<typeof databaseConfig>) => ({
