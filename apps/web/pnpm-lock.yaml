@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@eventhub/schemas':
+        specifier: link:../../packages/schemas
+        version: link:../../packages/schemas
       next:
         specifier: 16.4.6
         version: 16.4.6(@babel/core@7.29.13)(@types/node@20.19.43)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)

@@ -31,7 +31,7 @@
 $ pnpm install
 ```
 
-Requires Node 22.12 or later (Node 24 recommended) and pnpm.
+Requires Node 22.12+ (24 recommended) and pnpm. Run `pnpm install` in `packages/schemas` first (it builds the shared schemas).
 Copy `.env.example` to `.env` (`cp .env.example .env`), then run `pnpm start:dev`.
 The app refuses to start when a variable of `src/core/config/env.schema.ts` is missing or invalid.
 

@@ -5,6 +5,7 @@ import {
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { errorResponseSchema } from '@eventhub/schemas';
 import { AllExceptionsFilter } from './all-exceptions.filter.js';
 import { AppError } from './app-error.js';
 
@@ -15,6 +16,8 @@ function catchWith(exception: unknown) {
     switchToHttp: () => ({ getResponse: () => response }),
   } as unknown as ArgumentsHost;
   new AllExceptionsFilter().catch(exception, host);
+  // Every body must match the error format shared with the front.
+  errorResponseSchema.parse(response.json.mock.calls[0][0]);
   return {
     status: response.status.mock.calls[0][0],
     body: response.json.mock.calls[0][0],

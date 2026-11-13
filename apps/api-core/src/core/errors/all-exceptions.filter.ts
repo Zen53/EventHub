@@ -6,22 +6,19 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
+import type { ErrorResponse } from '@eventhub/schemas';
 import type { Response } from 'express';
 import { AppError } from './app-error.js';
 
-export interface ErrorBody {
-  error: { code: string; message: string; details: unknown };
-}
-
 export function toErrorResponse(exception: unknown): {
   status: number;
-  body: ErrorBody;
+  body: ErrorResponse;
 } {
   if (exception instanceof AppError) {
     const { status, code, message, details } = exception;
     return {
       status,
-      body: { error: { code, message, details: details ?? null } },
+      body: { error: { code, message, details } },
     };
   }
   if (exception instanceof HttpException && exception.getStatus() < 500) {

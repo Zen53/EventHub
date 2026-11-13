@@ -3,16 +3,12 @@ import {
   StandardSchemaValidationPipe,
   type StandardSchemaValidationPipeOptions,
 } from '@nestjs/common';
+import type { FieldError } from '@eventhub/schemas';
 import { AppError } from '../errors/app-error.js';
 
 type Issues = Parameters<
   NonNullable<StandardSchemaValidationPipeOptions['exceptionFactory']>
 >[0];
-
-export interface FieldError {
-  field: string;
-  message: string;
-}
 
 export function toValidationDetails(issues: Issues): FieldError[] {
   return issues.map((issue) => ({
@@ -47,18 +43,12 @@ class AppValidationPipe extends StandardSchemaValidationPipe {
       return await super.transform(value, metadata);
     } catch (error) {
       const parameter = metadata.data;
-      if (
-        !parameter ||
-        !(error instanceof AppError) ||
-        !Array.isArray(error.details)
-      )
+      if (!parameter || !(error instanceof AppError) || !error.details)
         throw error;
-      const details = (error.details as FieldError[]).map(
-        ({ field, message }) => ({
-          field: field ? `${parameter}.${field}` : parameter,
-          message,
-        }),
-      );
+      const details = error.details.map(({ field, message }) => ({
+        field: field ? `${parameter}.${field}` : parameter,
+        message,
+      }));
       throw new AppError(error.status, error.code, error.message, details);
     }
   }
