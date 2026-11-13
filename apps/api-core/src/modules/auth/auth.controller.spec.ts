@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common/constants.js';
 import { registerBodySchema } from '@eventhub/schemas';
 import { AppError } from '../../core/errors/app-error.js';
-import { IS_PUBLIC_KEY } from '../../core/security/public.decorator.js';
+import { Public } from '../../core/security/index.js';
 import { createValidationPipe } from '../../core/validation/validation.pipe.js';
 import type { UserRow } from '../users/index.js';
 import { AuthController } from './auth.controller.js';
@@ -65,7 +65,11 @@ describe('AuthController', () => {
   });
 
   it('marks the register route as public', () => {
-    expect(Reflect.getMetadata(IS_PUBLIC_KEY, handler)).toBe(true);
+    class Probe {}
+    Public()(Probe);
+    const [key] = Reflect.getMetadataKeys(Probe) as unknown[];
+
+    expect(Reflect.getMetadata(key, handler)).toBe(true);
   });
 
   it('validates the body with registerBodySchema', () => {
