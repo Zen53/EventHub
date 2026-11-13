@@ -6,6 +6,8 @@ export const envSchema = z.object({
     .default('development'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
+  /** HS256 secret of the access tokens. */
+  JWT_ACCESS_SECRET: z.string().min(32),
 });
 
 export type Env = z.infer<typeof envSchema>;
