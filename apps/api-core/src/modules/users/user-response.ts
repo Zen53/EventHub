@@ -8,7 +8,7 @@ export function toUserResponse(row: UserRow): User {
     email: row.email,
     firstName: row.firstName,
     lastName: row.lastName,
-    phone: row.phone ?? null,
+    phone: row.phone,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

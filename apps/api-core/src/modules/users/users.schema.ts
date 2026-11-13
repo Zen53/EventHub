@@ -1,8 +1,10 @@
 import { pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 
+export const USERS_EMAIL_UNIQUE = 'users_email_unique';
+
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
-  email: varchar('email', { length: 254 }).notNull().unique(),
+  email: varchar('email', { length: 254 }).notNull().unique(USERS_EMAIL_UNIQUE),
   firstName: varchar('first_name', { length: 50 }).notNull(),
   lastName: varchar('last_name', { length: 50 }).notNull(),
   // E.164: "+" followed by 15 digits at most.

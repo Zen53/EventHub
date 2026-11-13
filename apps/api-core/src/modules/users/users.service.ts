@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { Injectable } from '@nestjs/common';
+import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { AppError } from '../../core/errors/app-error.js';
 import { PasswordHasher } from './password-hasher.js';
 import { UsersRepository } from './users.repository.js';
-import type { UserRow } from './users.schema.js';
+import { USERS_EMAIL_UNIQUE, type UserRow } from './users.schema.js';
 
 export interface CreateUserInput {
   email: string;
@@ -16,19 +16,21 @@ export interface CreateUserInput {
 const UNIQUE_VIOLATION = '23505';
 
 // Drizzle wraps the postgres.js error in a DrizzleQueryError, whose `cause` carries the SQLSTATE code.
-function isUniqueViolation(error: unknown): boolean {
-  const codeOf = (value: unknown): unknown =>
-    typeof value === 'object' && value !== null && 'code' in value
-      ? value.code
-      : undefined;
-  return (
-    codeOf(error) === UNIQUE_VIOLATION ||
-    (error instanceof Error && codeOf(error.cause) === UNIQUE_VIOLATION)
-  );
+function isEmailUniqueViolation(error: unknown): boolean {
+  const pgError =
+    error instanceof Error && error.cause !== undefined ? error.cause : error;
+  if (typeof pgError !== 'object' || pgError === null) return false;
+  const { code, constraint_name } = pgError as {
+    code?: unknown;
+    constraint_name?: unknown;
+  };
+  return code === UNIQUE_VIOLATION && constraint_name === USERS_EMAIL_UNIQUE;
 }
 
+const normalizeEmail = (email: string): string => email.trim().toLowerCase();
+
 @Injectable()
-export class UsersService {
+export class UsersService implements OnModuleInit {
   private dummyHash?: Promise<string>;
 
   constructor(
@@ -36,11 +38,16 @@ export class UsersService {
     private readonly hasher: PasswordHasher,
   ) {}
 
+  // Computed at startup, so the first unknown-email login is not slower than the others.
+  async onModuleInit(): Promise<void> {
+    await this.getDummyHash();
+  }
+
   async create(input: CreateUserInput): Promise<UserRow> {
     const passwordHash = await this.hasher.hash(input.password);
     try {
       return await this.repository.insert({
-        email: input.email.toLowerCase(),
+        email: normalizeEmail(input.email),
         firstName: input.firstName,
         lastName: input.lastName,
         phone: input.phone ?? null,
@@ -48,7 +55,7 @@ export class UsersService {
       });
     } catch (error) {
       // The unique index decides, so two simultaneous sign-ups with the same email cannot both pass.
-      if (isUniqueViolation(error)) {
+      if (isEmailUniqueViolation(error)) {
         throw new AppError(
           409,
           'EMAIL_ALREADY_USED',
@@ -68,14 +75,22 @@ export class UsersService {
     email: string,
     password: string,
   ): Promise<UserRow | null> {
-    const user = await this.repository.findByEmail(email.toLowerCase());
+    const user = await this.repository.findByEmail(normalizeEmail(email));
     if (!user) {
       // Hash comparison anyway, so the response time does not reveal whether the account exists.
-      this.dummyHash ??= this.hasher.hash(randomUUID());
-      await this.hasher.verify(await this.dummyHash, password);
+      await this.hasher.verify(await this.getDummyHash(), password);
       return null;
     }
     const valid = await this.hasher.verify(user.passwordHash, password);
     return valid ? user : null;
+  }
+
+  private getDummyHash(): Promise<string> {
+    // A failed attempt is not cached, so the next call tries again.
+    this.dummyHash ??= this.hasher.hash(randomUUID()).catch((error) => {
+      this.dummyHash = undefined;
+      throw error;
+    });
+    return this.dummyHash;
   }
 }

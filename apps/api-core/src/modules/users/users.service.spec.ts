@@ -40,6 +40,16 @@ function setup() {
 }
 
 describe('UsersService.create', () => {
+  it('trims the email', async () => {
+    const { service, repository } = setup();
+
+    await service.create({ ...input, email: ' camille@exemple.fr ' });
+
+    expect(repository.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'camille@exemple.fr' }),
+    );
+  });
+
   it('stores the email in lowercase and the hashed password, never the plain one', async () => {
     const { service, repository, hasher } = setup();
 
@@ -68,16 +78,20 @@ describe('UsersService.create', () => {
     );
   });
 
+  const emailConflict = () =>
+    Object.assign(new Error('dup'), {
+      code: '23505',
+      constraint_name: 'users_email_unique',
+    });
+
   it.each([
-    ['the postgres error', Object.assign(new Error('dup'), { code: '23505' })],
+    ['the postgres error', emailConflict()],
     [
       'a Drizzle error wrapping it',
-      new Error('Failed query', {
-        cause: Object.assign(new Error('dup'), { code: '23505' }),
-      }),
+      new Error('Failed query', { cause: emailConflict() }),
     ],
   ])(
-    'turns a unique violation (%s) into 409 EMAIL_ALREADY_USED',
+    'turns a unique violation on the email (%s) into 409 EMAIL_ALREADY_USED',
     async (_, error) => {
       const { service, repository } = setup();
       repository.insert.mockRejectedValue(error);
@@ -91,6 +105,17 @@ describe('UsersService.create', () => {
       });
     },
   );
+
+  it('rethrows a unique violation on another constraint as is', async () => {
+    const { service, repository } = setup();
+    const error = Object.assign(new Error('dup'), {
+      code: '23505',
+      constraint_name: 'users_pkey',
+    });
+    repository.insert.mockRejectedValue(error);
+
+    await expect(service.create(input)).rejects.toBe(error);
+  });
 
   it('rethrows any other error as is', async () => {
     const { service, repository } = setup();
@@ -148,5 +173,35 @@ describe('UsersService.verifyCredentials', () => {
     await service.verifyCredentials('autre@exemple.fr', 'motdepasse123');
     expect(hasher.hash).toHaveBeenCalledTimes(1);
     expect(hasher.verify).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('UsersService dummy hash', () => {
+  it('is computed at module init, then reused for unknown emails', async () => {
+    const { service, repository, hasher } = setup();
+    repository.findByEmail.mockResolvedValue(null);
+    hasher.verify.mockResolvedValue(false);
+
+    await service.onModuleInit();
+    expect(hasher.hash).toHaveBeenCalledTimes(1);
+
+    await service.verifyCredentials('inconnu@exemple.fr', 'motdepasse123');
+    expect(hasher.hash).toHaveBeenCalledTimes(1);
+    expect(hasher.verify).toHaveBeenCalledWith('hashed', 'motdepasse123');
+  });
+
+  it('is computed again after a failure instead of caching the error', async () => {
+    const { service, repository, hasher } = setup();
+    repository.findByEmail.mockResolvedValue(null);
+    hasher.verify.mockResolvedValue(false);
+    hasher.hash.mockRejectedValueOnce(new Error('pool exhausted'));
+
+    await expect(
+      service.verifyCredentials('inconnu@exemple.fr', 'motdepasse123'),
+    ).rejects.toThrow('pool exhausted');
+    await expect(
+      service.verifyCredentials('inconnu@exemple.fr', 'motdepasse123'),
+    ).resolves.toBeNull();
+    expect(hasher.hash).toHaveBeenCalledTimes(2);
   });
 });
