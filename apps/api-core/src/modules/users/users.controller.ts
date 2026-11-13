@@ -9,7 +9,7 @@ import { toUserResponse } from './user.dto.js';
 import { UsersService } from './users.service.js';
 
 @Controller('me')
-export class MeController {
+export class UsersController {
   constructor(private readonly users: UsersService) {}
 
   @Get()

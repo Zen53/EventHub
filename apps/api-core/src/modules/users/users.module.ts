@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
-import { MeController } from './me.controller.js';
 import { PasswordHasher } from './password-hasher.js';
+import { UsersController } from './users.controller.js';
 import { UsersRepository } from './users.repository.js';
 import { UsersService } from './users.service.js';
 
 @Module({
-  controllers: [MeController],
+  controllers: [UsersController],
   providers: [UsersRepository, PasswordHasher, UsersService],
   exports: [UsersService],
 })

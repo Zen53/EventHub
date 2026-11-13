@@ -3,7 +3,7 @@ import { RequestMethod } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AppError } from '../../core/errors/app-error.js';
 import { IS_PUBLIC_KEY } from '../../core/security/public.decorator.js';
-import { MeController } from './me.controller.js';
+import { UsersController } from './users.controller.js';
 import { UsersModule } from './users.module.js';
 import type { UserRow } from './users.schema.js';
 import type { UsersService } from './users.service.js';
@@ -21,11 +21,11 @@ const row: UserRow = {
 
 function setup() {
   const users = { findById: vi.fn() };
-  const controller = new MeController(users as unknown as UsersService);
+  const controller = new UsersController(users as unknown as UsersService);
   return { controller, users };
 }
 
-describe('MeController.getMe', () => {
+describe('UsersController.getMe', () => {
   it('returns the identified user, without the password hash and with ISO dates', async () => {
     const { controller, users } = setup();
     users.findById.mockResolvedValue(row);
@@ -62,25 +62,27 @@ describe('MeController.getMe', () => {
   });
 });
 
-describe('MeController routing', () => {
+describe('UsersController routing', () => {
   const reflector = new Reflector();
   const handler = Object.getOwnPropertyDescriptor(
-    MeController.prototype,
+    UsersController.prototype,
     'getMe',
   )?.value as () => unknown;
 
   it('is mounted on GET /me', () => {
-    expect(reflector.get('path', MeController)).toBe('me');
+    expect(reflector.get('path', UsersController)).toBe('me');
     expect(reflector.get('path', handler)).toBe('/');
     expect(reflector.get('method', handler)).toBe(RequestMethod.GET);
   });
 
   it('is registered in UsersModule', () => {
-    expect(reflector.get('controllers', UsersModule)).toContain(MeController);
+    expect(reflector.get('controllers', UsersModule)).toContain(
+      UsersController,
+    );
   });
 
   it('is not public, neither on the class nor on the handler', () => {
-    expect(reflector.get(IS_PUBLIC_KEY, MeController)).toBeUndefined();
+    expect(reflector.get(IS_PUBLIC_KEY, UsersController)).toBeUndefined();
     expect(reflector.get(IS_PUBLIC_KEY, handler)).toBeUndefined();
   });
 });
