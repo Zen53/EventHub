@@ -36,7 +36,7 @@ export class AuthService {
       );
     }
     const accessToken = this.accessTokens.sign({ userId: user.id });
-    const refreshToken = await this.refreshTokens.issue(user.id);
+    const refreshToken = this.refreshTokens.issue(user.id);
     return { accessToken, refreshToken, user };
   }
 }

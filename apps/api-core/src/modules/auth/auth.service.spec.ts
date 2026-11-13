@@ -25,7 +25,8 @@ const body = {
 const credentials = { email: 'camille@exemple.fr', password: 'motdepasse123' };
 
 const issued = {
-  token: 'opaque-refresh-token',
+  token: 'signed-refresh-token',
+  jti: 'c1b2c3d4-0000-4000-8000-000000000003',
   expiresAt: new Date('2026-11-20T10:00:00Z'),
 };
 
@@ -35,7 +36,7 @@ function setup() {
     verifyCredentials: vi.fn().mockResolvedValue(row),
   };
   const accessTokens = { sign: vi.fn().mockReturnValue('signed-access-token') };
-  const refreshTokens = { issue: vi.fn().mockResolvedValue(issued) };
+  const refreshTokens = { issue: vi.fn().mockReturnValue(issued) };
   const service = new AuthService(
     users as unknown as UsersService,
     accessTokens as unknown as AccessTokenService,

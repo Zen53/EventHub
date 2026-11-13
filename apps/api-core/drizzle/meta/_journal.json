@@ -8,13 +8,6 @@
       "when": 1794582547079,
       "tag": "0000_fixed_blackheart",
       "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1794588313488,
-      "tag": "0001_unknown_rafael_vega",
-      "breakpoints": true
     }
   ]
 }

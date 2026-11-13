@@ -43,7 +43,8 @@ const handler = handlerOf('register');
 const loginResult = {
   accessToken: 'signed-access-token',
   refreshToken: {
-    token: 'opaque-refresh-token',
+    token: 'signed-refresh-token',
+    jti: 'c1b2c3d4-0000-4000-8000-000000000003',
     expiresAt: new Date('2026-11-20T10:00:00Z'),
   },
   user: row,
@@ -167,7 +168,7 @@ describe('AuthController.login', () => {
     expect(response.cookie).toHaveBeenCalledTimes(1);
     expect(response.cookie).toHaveBeenCalledWith(
       'refreshToken',
-      'opaque-refresh-token',
+      'signed-refresh-token',
       {
         httpOnly: true,
         secure: true,
@@ -201,7 +202,7 @@ describe('AuthController.login', () => {
     });
     expect(body).not.toHaveProperty('refreshToken');
     expect(body.user).not.toHaveProperty('passwordHash');
-    expect(JSON.stringify(body)).not.toContain('opaque-refresh-token');
+    expect(JSON.stringify(body)).not.toContain('signed-refresh-token');
     expect(JSON.stringify(body)).not.toContain('stored-hash');
   });
 
