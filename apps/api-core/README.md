@@ -33,6 +33,8 @@ $ npm install
 
 ## Compile and run the project
 
+Local database: copy `.env.example` to `.env` and set your values, then `docker compose up -d` and `npm run db:migrate`.
+
 ```bash
 # development
 $ npm run start
