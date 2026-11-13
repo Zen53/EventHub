@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { defineConfig } from 'drizzle-kit';
-import { parseDatabaseConfig } from './src/core/database/database.config.js';
+import { envSchema } from './src/core/config/env.schema.js';
 
 // drizzle-kit runs outside Nest, so it loads .env itself (variables already set in the shell win).
 if (existsSync('.env')) {
@@ -14,7 +14,8 @@ export default defineConfig({
   // Validated only when a command reads it (migrate, push, studio), so `generate` needs no database.
   dbCredentials: {
     get url() {
-      return parseDatabaseConfig(process.env).url;
+      return envSchema.pick({ DATABASE_URL: true }).parse(process.env)
+        .DATABASE_URL;
     },
   },
 });

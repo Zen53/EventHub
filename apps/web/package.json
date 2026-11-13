@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@eventhub/schemas": "link:../../packages/schemas",
     "next": "16.4.6",
     "react": "19.3.0",
     "react-dom": "19.3.0"

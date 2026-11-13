@@ -1,8 +1,8 @@
 import { Global, Module } from '@nestjs/common';
-import { ConfigModule, type ConfigType } from '@nestjs/config';
+import { ConfigService } from '@nestjs/config';
 import { DrizzleModule } from '@nestjs/drizzle';
 import { drizzle } from 'drizzle-orm/postgres-js';
-import { databaseConfig } from './database.config.js';
+import type { Env } from '../config/env.schema.js';
 import * as schema from './schema.js';
 
 // DrizzleModule makes the database injectable everywhere and closes its client on application shutdown.
@@ -10,11 +10,10 @@ import * as schema from './schema.js';
 @Module({
   imports: [
     DrizzleModule.forRootAsync<typeof drizzle>({
-      imports: [ConfigModule.forFeature(databaseConfig)],
-      inject: [databaseConfig.KEY],
-      useFactory: (config: ConfigType<typeof databaseConfig>) => ({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService<Env, true>) => ({
         drizzle,
-        connection: config.url,
+        connection: config.get('DATABASE_URL', { infer: true }),
         schema,
       }),
     }),

@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { drizzle } from 'drizzle-orm/postgres-js';
+import { envSchema } from '../config/env.schema.js';
 import { type Database, InjectDatabase } from './database.js';
 import { DatabaseModule } from './database.module.js';
 
@@ -12,6 +14,14 @@ const { end, fakeDb } = vi.hoisted(() => {
 vi.mock('drizzle-orm/postgres-js', () => ({
   drizzle: vi.fn(() => fakeDb),
 }));
+
+// Same ConfigModule setup as CoreModule, without reading a .env file.
+const configModule = () =>
+  ConfigModule.forRoot({
+    isGlobal: true,
+    ignoreEnvFile: true,
+    validationSchema: envSchema,
+  });
 
 @Injectable()
 class Consumer {
@@ -31,7 +41,7 @@ describe('DatabaseModule', () => {
     process.env.DATABASE_URL = 'postgres://user:pass@localhost:5432/db';
 
     const moduleRef = await Test.createTestingModule({
-      imports: [DatabaseModule],
+      imports: [configModule(), DatabaseModule],
       providers: [Consumer],
     }).compile();
 
@@ -50,7 +60,9 @@ describe('DatabaseModule', () => {
     delete process.env.DATABASE_URL;
 
     await expect(
-      Test.createTestingModule({ imports: [DatabaseModule] }).compile(),
+      Test.createTestingModule({
+        imports: [configModule(), DatabaseModule],
+      }).compile(),
     ).rejects.toThrow(/DATABASE_URL/);
     expect(drizzle).not.toHaveBeenCalled();
   });
