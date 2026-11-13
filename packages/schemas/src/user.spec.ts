@@ -1,12 +1,13 @@
+import { describe, expect, it } from 'vitest';
 import {
   emailSchema,
   nameSchema,
   passwordSchema,
   phoneSchema,
   userSchema,
-} from '@eventhub/schemas';
+} from './user.js';
 
-describe('shared user schemas', () => {
+describe('user schemas', () => {
   describe('emailSchema', () => {
     it('accepts a valid email and lowercases it', () => {
       expect(emailSchema.parse(' Camille@Exemple.FR ')).toBe(
