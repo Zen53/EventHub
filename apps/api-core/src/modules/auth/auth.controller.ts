@@ -4,6 +4,7 @@ import {
   registerBodySchema,
   type User,
 } from '@eventhub/schemas';
+import { Public } from '../../core/security/index.js';
 import { toUserResponse } from '../users/index.js';
 import { AuthService } from './auth.service.js';
 
@@ -11,6 +12,7 @@ import { AuthService } from './auth.service.js';
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
+  @Public()
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   async register(
