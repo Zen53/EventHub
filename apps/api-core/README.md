@@ -37,7 +37,7 @@ The app refuses to start when a variable of `src/core/config/env.schema.ts` is m
 
 ## Compile and run the project
 
-Local database: copy `.env.example` to `.env` and set your values, then `docker compose up -d` and, once `drizzle/` holds migrations (`pnpm db:generate`), `pnpm db:migrate`.
+Local database: set `DATABASE_URL` in `.env` to your local Postgres, then, once `drizzle/` holds migrations (`pnpm db:generate`), run `pnpm db:migrate`.
 
 ```bash
 # development
