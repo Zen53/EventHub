@@ -31,6 +31,9 @@
 $ npm install
 ```
 
+Copy `.env.example` to `.env` (`cp .env.example .env`), then run `npm run start:dev`.
+The app refuses to start when a variable of `src/core/config/env.schema.ts` is missing or invalid.
+
 ## Compile and run the project
 
 ```bash
