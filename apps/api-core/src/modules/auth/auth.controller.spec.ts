@@ -3,9 +3,11 @@ import {
   HTTP_CODE_METADATA,
   METHOD_METADATA,
   PATH_METADATA,
+  RESPONSE_PASSTHROUGH_METADATA,
   ROUTE_ARGS_METADATA,
 } from '@nestjs/common/constants.js';
-import { registerBodySchema } from '@eventhub/schemas';
+import { loginBodySchema, registerBodySchema } from '@eventhub/schemas';
+import type { Response } from 'express';
 import { AppError } from '../../core/errors/app-error.js';
 import { Public } from '../../core/security/index.js';
 import { createValidationPipe } from '../../core/validation/validation.pipe.js';
@@ -32,24 +34,48 @@ const body = {
   phone: '+33612345678',
 };
 
-const handler = Object.getOwnPropertyDescriptor(
-  AuthController.prototype,
-  'register',
-)?.value as object;
+const handlerOf = (name: 'register' | 'login') =>
+  Object.getOwnPropertyDescriptor(AuthController.prototype, name)
+    ?.value as object;
+
+const handler = handlerOf('register');
+
+const loginResult = {
+  accessToken: 'signed-access-token',
+  refreshToken: {
+    token: 'opaque-refresh-token',
+    expiresAt: new Date('2026-11-20T10:00:00Z'),
+  },
+  user: row,
+};
 
 function setup() {
-  const auth = { register: vi.fn().mockResolvedValue(row) };
+  const auth = {
+    register: vi.fn().mockResolvedValue(row),
+    login: vi.fn().mockResolvedValue(loginResult),
+  };
   const controller = new AuthController(auth as unknown as AuthService);
   return { controller, auth };
 }
 
-function bodySchema() {
-  const args = Reflect.getMetadata(
-    ROUTE_ARGS_METADATA,
-    AuthController,
-    'register',
-  ) as Record<string, { index: number; schema?: unknown }>;
-  return Object.values(args).find((arg) => arg.index === 0)?.schema;
+function routeArgs(name: 'register' | 'login') {
+  return Object.values(
+    Reflect.getMetadata(ROUTE_ARGS_METADATA, AuthController, name) as Record<
+      string,
+      { index: number; schema?: unknown }
+    >,
+  );
+}
+
+function bodySchema(name: 'register' | 'login' = 'register') {
+  return routeArgs(name).find((arg) => arg.index === 0)?.schema;
+}
+
+function publicKey() {
+  class Probe {}
+  Public()(Probe);
+  const [key] = Reflect.getMetadataKeys(Probe) as unknown[];
+  return key;
 }
 
 describe('AuthController', () => {
@@ -65,11 +91,7 @@ describe('AuthController', () => {
   });
 
   it('marks the register route as public', () => {
-    class Probe {}
-    Public()(Probe);
-    const [key] = Reflect.getMetadataKeys(Probe) as unknown[];
-
-    expect(Reflect.getMetadata(key, handler)).toBe(true);
+    expect(Reflect.getMetadata(publicKey(), handler)).toBe(true);
   });
 
   it('validates the body with registerBodySchema', () => {
@@ -105,6 +127,98 @@ describe('AuthController', () => {
     auth.register.mockRejectedValue(error);
 
     await expect(controller.register(body)).rejects.toBe(error);
+  });
+});
+
+describe('AuthController.login', () => {
+  const login = handlerOf('login');
+  const credentials = {
+    email: 'camille@exemple.fr',
+    password: 'motdepasse123',
+  };
+
+  it('is mounted on POST /auth/login, public, and answers 200', () => {
+    expect(Reflect.getMetadata(PATH_METADATA, login)).toBe('login');
+    expect(Reflect.getMetadata(METHOD_METADATA, login)).toBe(
+      RequestMethod.POST,
+    );
+    expect(Reflect.getMetadata(HTTP_CODE_METADATA, login)).toBe(HttpStatus.OK);
+    expect(Reflect.getMetadata(publicKey(), login)).toBe(true);
+  });
+
+  it('validates the body with loginBodySchema and uses a passthrough response', () => {
+    expect(bodySchema('login')).toBe(loginBodySchema);
+    expect(
+      Reflect.getMetadata(
+        RESPONSE_PASSTHROUGH_METADATA,
+        AuthController,
+        'login',
+      ),
+    ).toBe(true);
+  });
+
+  it('sets the refresh token cookie with the contract options', async () => {
+    const { controller, auth } = setup();
+    const response = { cookie: vi.fn() };
+
+    await controller.login(credentials, response as unknown as Response);
+
+    expect(auth.login).toHaveBeenCalledWith(credentials);
+    expect(response.cookie).toHaveBeenCalledTimes(1);
+    expect(response.cookie).toHaveBeenCalledWith(
+      'refreshToken',
+      'opaque-refresh-token',
+      {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'strict',
+        path: '/auth',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      },
+    );
+  });
+
+  it('answers the access token and the user, without refresh token nor passwordHash', async () => {
+    const { controller } = setup();
+    const response = { cookie: vi.fn() };
+
+    const body = await controller.login(
+      credentials,
+      response as unknown as Response,
+    );
+
+    expect(body).toEqual({
+      accessToken: 'signed-access-token',
+      user: {
+        id: row.id,
+        email: 'camille@exemple.fr',
+        firstName: 'Camille',
+        lastName: 'Durand',
+        phone: '+33612345678',
+        createdAt: '2026-11-13T10:00:00.000Z',
+        updatedAt: '2026-11-13T10:00:00.000Z',
+      },
+    });
+    expect(body).not.toHaveProperty('refreshToken');
+    expect(body.user).not.toHaveProperty('passwordHash');
+    expect(JSON.stringify(body)).not.toContain('opaque-refresh-token');
+    expect(JSON.stringify(body)).not.toContain('stored-hash');
+  });
+
+  it('propagates 401 INVALID_CREDENTIALS without setting a cookie', async () => {
+    const { controller, auth } = setup();
+    const response = { cookie: vi.fn() };
+    const error = new AppError(
+      401,
+      'INVALID_CREDENTIALS',
+      'Email ou mot de passe incorrect.',
+    );
+    auth.login.mockRejectedValue(error);
+
+    await expect(
+      controller.login(credentials, response as unknown as Response),
+    ).rejects.toBe(error);
+    expect(response.cookie).not.toHaveBeenCalled();
   });
 });
 
