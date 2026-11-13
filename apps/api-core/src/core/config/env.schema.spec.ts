@@ -46,6 +46,7 @@ describe('envSchema', () => {
     { JWT_ACCESS_SECRET: undefined },
     { JWT_ACCESS_SECRET: '' },
     { JWT_ACCESS_SECRET: 'x'.repeat(31) },
+    { JWT_ACCESS_SECRET: 'change-me-to-a-random-secret-of-at-least-32-chars' },
   ])('rejects the access token secret in %o', (env) => {
     expect(envSchema.safeParse({ ...required, ...env }).success).toBe(false);
   });
