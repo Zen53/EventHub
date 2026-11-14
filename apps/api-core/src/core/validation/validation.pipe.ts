@@ -22,7 +22,7 @@ function joinPath(issue: Issues[number]): string {
 
 function unrecognizedKeys(issue: Issues[number]): string[] | undefined {
   if (!('code' in issue) || issue.code !== 'unrecognized_keys') return;
-  return 'keys' in issue && Array.isArray(issue.keys)
+  return 'keys' in issue && Array.isArray(issue.keys) && issue.keys.length > 0
     ? issue.keys.map(String)
     : undefined;
 }
