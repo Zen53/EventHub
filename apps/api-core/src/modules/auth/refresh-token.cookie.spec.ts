@@ -1,5 +1,6 @@
 import type { Response } from 'express';
 import {
+  clearRefreshTokenCookie,
   REFRESH_TOKEN_COOKIE,
   refreshTokenCookieOptions,
   setRefreshTokenCookie,
@@ -27,5 +28,25 @@ describe('refresh token cookie', () => {
       'opaque-token',
       refreshTokenCookieOptions,
     );
+  });
+
+  it('clears the refreshToken cookie with the same scope, without maxAge', () => {
+    const response = { clearCookie: vi.fn() };
+
+    clearRefreshTokenCookie(response as unknown as Response);
+
+    expect(response.clearCookie).toHaveBeenCalledWith('refreshToken', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+      path: '/auth',
+    });
+    const [, options] = response.clearCookie.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    const { maxAge: _maxAge, ...scope } = refreshTokenCookieOptions;
+    expect(options).toEqual(scope);
+    expect(options).not.toHaveProperty('maxAge');
   });
 });

@@ -7,7 +7,7 @@ import {
   ROUTE_ARGS_METADATA,
 } from '@nestjs/common/constants.js';
 import { loginBodySchema, registerBodySchema } from '@eventhub/schemas';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { AppError } from '../../core/errors/app-error.js';
 import { Public } from '../../core/security/index.js';
 import { createValidationPipe } from '../../core/validation/validation.pipe.js';
@@ -34,7 +34,9 @@ const body = {
   phone: '+33612345678',
 };
 
-const handlerOf = (name: 'register' | 'login') =>
+type Route = 'register' | 'login' | 'logout';
+
+const handlerOf = (name: Route) =>
   Object.getOwnPropertyDescriptor(AuthController.prototype, name)
     ?.value as object;
 
@@ -54,12 +56,13 @@ function setup() {
   const auth = {
     register: vi.fn().mockResolvedValue(row),
     login: vi.fn().mockResolvedValue(loginResult),
+    logout: vi.fn().mockResolvedValue(undefined),
   };
   const controller = new AuthController(auth as unknown as AuthService);
   return { controller, auth };
 }
 
-function routeArgs(name: 'register' | 'login') {
+function routeArgs(name: Route) {
   return Object.values(
     Reflect.getMetadata(ROUTE_ARGS_METADATA, AuthController, name) as Record<
       string,
@@ -220,6 +223,93 @@ describe('AuthController.login', () => {
       controller.login(credentials, response as unknown as Response),
     ).rejects.toBe(error);
     expect(response.cookie).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthController.logout', () => {
+  const logout = handlerOf('logout');
+  const clearedScope = {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'strict',
+    path: '/auth',
+  };
+
+  const call = (controller: AuthController, cookies: unknown) => {
+    const response = { clearCookie: vi.fn(), cookie: vi.fn() };
+    const request = { cookies };
+    return {
+      response,
+      result: controller.logout(
+        request as unknown as Request,
+        response as unknown as Response,
+      ),
+    };
+  };
+
+  it('is mounted on POST /auth/logout, public, and answers 204', () => {
+    expect(Reflect.getMetadata(PATH_METADATA, logout)).toBe('logout');
+    expect(Reflect.getMetadata(METHOD_METADATA, logout)).toBe(
+      RequestMethod.POST,
+    );
+    expect(Reflect.getMetadata(HTTP_CODE_METADATA, logout)).toBe(
+      HttpStatus.NO_CONTENT,
+    );
+    expect(Reflect.getMetadata(publicKey(), logout)).toBe(true);
+    expect(
+      Reflect.getMetadata(
+        RESPONSE_PASSTHROUGH_METADATA,
+        AuthController,
+        'logout',
+      ),
+    ).toBe(true);
+  });
+
+  it('passes the refresh token cookie to the service, clears the cookie and returns no body', async () => {
+    const { controller, auth } = setup();
+
+    const { response, result } = call(controller, {
+      refreshToken: 'signed-refresh-token',
+    });
+
+    await expect(result).resolves.toBeUndefined();
+    expect(auth.logout).toHaveBeenCalledWith('signed-refresh-token');
+    expect(response.clearCookie).toHaveBeenCalledTimes(1);
+    expect(response.clearCookie).toHaveBeenCalledWith(
+      'refreshToken',
+      clearedScope,
+    );
+    expect(response.cookie).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['without cookies', undefined],
+    ['without the refreshToken cookie', {}],
+    ['with a non-string refreshToken cookie', { refreshToken: { a: 1 } }],
+  ])('clears the cookie %s and passes no token', async (_, cookies) => {
+    const { controller, auth } = setup();
+
+    const { response, result } = call(controller, cookies);
+
+    await expect(result).resolves.toBeUndefined();
+    expect(auth.logout).toHaveBeenCalledWith(undefined);
+    expect(response.clearCookie).toHaveBeenCalledWith(
+      'refreshToken',
+      clearedScope,
+    );
+  });
+
+  it('propagates an infrastructure error without clearing the cookie', async () => {
+    const { controller, auth } = setup();
+    const error = new Error('connection refused');
+    auth.logout.mockRejectedValue(error);
+
+    const { response, result } = call(controller, {
+      refreshToken: 'signed-refresh-token',
+    });
+
+    await expect(result).rejects.toBe(error);
+    expect(response.clearCookie).not.toHaveBeenCalled();
   });
 });
 

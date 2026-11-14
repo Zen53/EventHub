@@ -4,6 +4,7 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Req,
   Res,
 } from '@nestjs/common';
 import {
@@ -14,11 +15,15 @@ import {
   registerBodySchema,
   type User,
 } from '@eventhub/schemas';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { Public } from '../../core/security/index.js';
 import { toUserResponse } from '../users/index.js';
 import { AuthService } from './auth.service.js';
-import { setRefreshTokenCookie } from './refresh-token.cookie.js';
+import {
+  clearRefreshTokenCookie,
+  REFRESH_TOKEN_COOKIE,
+  setRefreshTokenCookie,
+} from './refresh-token.cookie.js';
 
 @Controller('auth')
 export class AuthController {
@@ -43,5 +48,17 @@ export class AuthController {
     const { accessToken, refreshToken, user } = await this.auth.login(body);
     setRefreshTokenCookie(response, refreshToken.token);
     return { accessToken, user: toUserResponse(user) };
+  }
+
+  @Public()
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async logout(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<void> {
+    const token: unknown = request.cookies?.[REFRESH_TOKEN_COOKIE];
+    await this.auth.logout(typeof token === 'string' ? token : undefined);
+    clearRefreshTokenCookie(response);
   }
 }

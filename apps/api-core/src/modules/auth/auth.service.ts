@@ -39,4 +39,24 @@ export class AuthService {
     const refreshToken = this.refreshTokens.issue(user.id);
     return { accessToken, refreshToken, user };
   }
+
+  async logout(token: string | undefined): Promise<void> {
+    if (!token) {
+      return;
+    }
+    const verified = await this.refreshTokens
+      .verify(token)
+      .catch((error: unknown) => {
+        if (isInvalidRefreshToken(error)) {
+          return null;
+        }
+        throw error;
+      });
+    if (verified) {
+      await this.refreshTokens.revoke(verified);
+    }
+  }
 }
+
+const isInvalidRefreshToken = (error: unknown) =>
+  error instanceof AppError && error.code === 'INVALID_REFRESH_TOKEN';
