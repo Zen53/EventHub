@@ -356,7 +356,18 @@ describe('validation of the register body by the global pipe', () => {
 
     expect(error).toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
     expect((error as AppError).details).toEqual([
-      { field: '', message: 'Champ inconnu : passwordHash.' },
+      { field: 'passwordHash', message: "Ce champ n'est pas autorisé." },
+    ]);
+  });
+
+  it('reports each unknown field of the register body in key order', async () => {
+    const error = await pipe
+      .transform({ ...body, role: 'x', id: 1 }, metadata)
+      .catch((e: unknown) => e);
+
+    expect((error as AppError).details).toEqual([
+      { field: 'role', message: "Ce champ n'est pas autorisé." },
+      { field: 'id', message: "Ce champ n'est pas autorisé." },
     ]);
   });
 });

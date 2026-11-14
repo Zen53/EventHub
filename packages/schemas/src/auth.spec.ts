@@ -93,15 +93,19 @@ describe('registerBodySchema', () => {
     expect(issuesOf({ ...body, ...patch })).toContainEqual({ path, message });
   });
 
-  it('rejects an unknown field', () => {
-    expect(issuesOf({ ...body, role: 'admin' })).toEqual([
-      { path: '', message: 'Champ inconnu : role.' },
-    ]);
-  });
+  it('rejects unknown fields with their keys', () => {
+    const result = registerBodySchema.safeParse({
+      ...body,
+      role: 'admin',
+      passwordHash: 'x',
+    });
 
-  it('rejects a passwordHash sent by the client', () => {
-    expect(issuesOf({ ...body, passwordHash: 'x' })).toEqual([
-      { path: '', message: 'Champ inconnu : passwordHash.' },
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({
+        code: 'unrecognized_keys',
+        path: [],
+        keys: ['role', 'passwordHash'],
+      }),
     ]);
   });
 
