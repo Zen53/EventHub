@@ -13,9 +13,7 @@ export interface RefreshResult {
   refreshToken: IssuedRefreshToken;
 }
 
-export interface LoginResult {
-  accessToken: string;
-  refreshToken: IssuedRefreshToken;
+export interface LoginResult extends RefreshResult {
   user: UserRow;
 }
 
