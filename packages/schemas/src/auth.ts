@@ -7,10 +7,10 @@ import {
   userSchema,
 } from './user.js';
 
-const strictBodyError = (issue: { code: string; keys?: string[] }) =>
-  issue.code === 'unrecognized_keys'
-    ? `Champ inconnu : ${(issue.keys ?? []).join(', ')}.`
-    : 'Le corps de la requête doit être un objet JSON.';
+const strictBodyError = (issue: { code: string }) =>
+  issue.code === 'invalid_type'
+    ? 'Le corps de la requête doit être un objet JSON.'
+    : undefined;
 
 export const registerBodySchema = z.strictObject(
   {
