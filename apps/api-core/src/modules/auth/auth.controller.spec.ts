@@ -34,7 +34,7 @@ const body = {
   phone: '+33612345678',
 };
 
-type Route = 'register' | 'login' | 'logout';
+type Route = 'register' | 'login' | 'logout' | 'refresh';
 
 const handlerOf = (name: Route) =>
   Object.getOwnPropertyDescriptor(AuthController.prototype, name)
@@ -52,11 +52,21 @@ const loginResult = {
   user: row,
 };
 
+const refreshResult = {
+  accessToken: 'new-access-token',
+  refreshToken: {
+    token: 'rotated-refresh-token',
+    jti: 'd1b2c3d4-0000-4000-8000-000000000004',
+    expiresAt: new Date('2026-11-21T10:00:00Z'),
+  },
+};
+
 function setup() {
   const auth = {
     register: vi.fn().mockResolvedValue(row),
     login: vi.fn().mockResolvedValue(loginResult),
     logout: vi.fn().mockResolvedValue(undefined),
+    refresh: vi.fn().mockResolvedValue(refreshResult),
   };
   const controller = new AuthController(auth as unknown as AuthService);
   return { controller, auth };
@@ -310,6 +320,126 @@ describe('AuthController.logout', () => {
 
     await expect(result).rejects.toBe(error);
     expect(response.clearCookie).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthController.refresh', () => {
+  const refresh = handlerOf('refresh');
+  const clearedScope = {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'strict',
+    path: '/auth',
+  };
+
+  const call = (controller: AuthController, cookies: unknown) => {
+    const calls: string[] = [];
+    const response = {
+      cookie: vi.fn(() => calls.push('cookie')),
+      clearCookie: vi.fn(() => calls.push('clearCookie')),
+    };
+    const request = { cookies };
+    return {
+      calls,
+      response,
+      result: controller.refresh(
+        request as unknown as Request,
+        response as unknown as Response,
+      ),
+    };
+  };
+
+  it('is mounted on POST /auth/refresh, public, and answers 200 with a passthrough response', () => {
+    expect(Reflect.getMetadata(PATH_METADATA, refresh)).toBe('refresh');
+    expect(Reflect.getMetadata(METHOD_METADATA, refresh)).toBe(
+      RequestMethod.POST,
+    );
+    expect(Reflect.getMetadata(HTTP_CODE_METADATA, refresh)).toBe(
+      HttpStatus.OK,
+    );
+    expect(Reflect.getMetadata(publicKey(), refresh)).toBe(true);
+    expect(
+      Reflect.getMetadata(
+        RESPONSE_PASSTHROUGH_METADATA,
+        AuthController,
+        'refresh',
+      ),
+    ).toBe(true);
+  });
+
+  it('reads no body', () => {
+    expect(routeArgs('refresh').some((arg) => arg.schema !== undefined)).toBe(
+      false,
+    );
+  });
+
+  it('sets the new refresh token cookie and answers only the access token', async () => {
+    const { controller, auth } = setup();
+
+    const { response, result } = call(controller, {
+      refreshToken: 'signed-refresh-token',
+    });
+    const body = await result;
+
+    expect(auth.refresh).toHaveBeenCalledWith('signed-refresh-token');
+    expect(body).toEqual({ accessToken: 'new-access-token' });
+    expect(JSON.stringify(body)).not.toContain('rotated-refresh-token');
+    expect(response.cookie).toHaveBeenCalledTimes(1);
+    expect(response.cookie).toHaveBeenCalledWith(
+      'refreshToken',
+      'rotated-refresh-token',
+      { ...clearedScope, maxAge: 7 * 24 * 60 * 60 * 1000 },
+    );
+    expect(response.clearCookie).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['without cookies', undefined],
+    ['without the refreshToken cookie', {}],
+    ['with a non-string refreshToken cookie', { refreshToken: { a: 1 } }],
+  ])('passes no token to the service %s', async (_, cookies) => {
+    const { controller, auth } = setup();
+
+    await call(controller, cookies).result;
+
+    expect(auth.refresh).toHaveBeenCalledWith(undefined);
+  });
+
+  it('clears the cookie then rethrows 401 INVALID_REFRESH_TOKEN', async () => {
+    const { controller, auth } = setup();
+    const error = new AppError(
+      401,
+      'INVALID_REFRESH_TOKEN',
+      'Refresh token absent, expiré ou déjà utilisé.',
+    );
+    auth.refresh.mockRejectedValue(error);
+
+    const { calls, response, result } = call(controller, {
+      refreshToken: 'used-refresh-token',
+    });
+
+    await expect(result).rejects.toBe(error);
+    expect(response.clearCookie).toHaveBeenCalledTimes(1);
+    expect(response.clearCookie).toHaveBeenCalledWith(
+      'refreshToken',
+      clearedScope,
+    );
+    expect(response.cookie).not.toHaveBeenCalled();
+    expect(calls).toEqual(['clearCookie']);
+  });
+
+  it('propagates an infrastructure error without touching the cookie', async () => {
+    const { controller, auth } = setup();
+    const error = new Error('connection refused');
+    auth.refresh.mockRejectedValue(error);
+
+    const { response, result } = call(controller, {
+      refreshToken: 'signed-refresh-token',
+    });
+
+    await expect(result).rejects.toBe(error);
+    expect(response.clearCookie).not.toHaveBeenCalled();
+    expect(response.cookie).not.toHaveBeenCalled();
   });
 });
 

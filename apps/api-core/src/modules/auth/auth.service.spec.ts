@@ -47,6 +47,7 @@ function setup() {
   const users = {
     create: vi.fn().mockResolvedValue(row),
     verifyCredentials: vi.fn().mockResolvedValue(row),
+    findById: vi.fn().mockResolvedValue(row),
   };
   const accessTokens = { sign: vi.fn().mockReturnValue('signed-access-token') };
   const refreshTokens = {
@@ -201,5 +202,129 @@ describe('AuthService.logout', () => {
     refreshTokens.verify.mockRejectedValue(error);
 
     await expect(service.logout('signed-refresh-token')).rejects.toBe(error);
+  });
+});
+
+describe('AuthService.refresh', () => {
+  const rotated = {
+    token: 'rotated-refresh-token',
+    jti: 'd1b2c3d4-0000-4000-8000-000000000004',
+    expiresAt: new Date('2026-11-21T10:00:00Z'),
+  };
+
+  const refreshError = (service: AuthService, token: string | undefined) =>
+    service.refresh(token).catch((error: unknown) => error);
+
+  const expectInvalidRefreshToken = (error: unknown) => {
+    expect(error).toBeInstanceOf(AppError);
+    expect(error).toMatchObject({
+      status: 401,
+      code: 'INVALID_REFRESH_TOKEN',
+      message: 'Refresh token absent, expiré ou déjà utilisé.',
+    });
+  };
+
+  it.each([undefined, ''])(
+    'throws 401 INVALID_REFRESH_TOKEN without a cookie (%j)',
+    async (token) => {
+      const { service, refreshTokens, accessTokens } = setup();
+
+      expectInvalidRefreshToken(await refreshError(service, token));
+      expect(refreshTokens.verify).not.toHaveBeenCalled();
+      expect(refreshTokens.revoke).not.toHaveBeenCalled();
+      expect(refreshTokens.issue).not.toHaveBeenCalled();
+      expect(accessTokens.sign).not.toHaveBeenCalled();
+    },
+  );
+
+  it('propagates 401 INVALID_REFRESH_TOKEN for an invalid or expired token', async () => {
+    const { service, refreshTokens, accessTokens } = setup();
+    const error = invalidRefreshToken();
+    refreshTokens.verify.mockRejectedValue(error);
+
+    await expect(service.refresh('forged-token')).rejects.toBe(error);
+    expect(refreshTokens.revoke).not.toHaveBeenCalled();
+    expect(refreshTokens.issue).not.toHaveBeenCalled();
+    expect(accessTokens.sign).not.toHaveBeenCalled();
+  });
+
+  it('throws 401 INVALID_REFRESH_TOKEN for a token already used, without issuing a new one', async () => {
+    const { service, users, refreshTokens, accessTokens } = setup();
+    refreshTokens.revoke.mockResolvedValue(false);
+
+    expectInvalidRefreshToken(
+      await refreshError(service, 'signed-refresh-token'),
+    );
+    expect(refreshTokens.revoke).toHaveBeenCalledWith(verified);
+    expect(users.findById).not.toHaveBeenCalled();
+    expect(refreshTokens.issue).not.toHaveBeenCalled();
+    expect(accessTokens.sign).not.toHaveBeenCalled();
+  });
+
+  it('never checks isRevoked before revoking', async () => {
+    const { service, refreshTokens } = setup();
+    const isRevoked = vi.fn().mockResolvedValue(false);
+    Object.assign(refreshTokens, { isRevoked });
+
+    await service.refresh('signed-refresh-token');
+
+    expect(isRevoked).not.toHaveBeenCalled();
+  });
+
+  it('throws 401 INVALID_REFRESH_TOKEN for a deleted user, after revoking the old token', async () => {
+    const { service, users, refreshTokens, accessTokens } = setup();
+    users.findById.mockResolvedValue(null);
+
+    expectInvalidRefreshToken(
+      await refreshError(service, 'signed-refresh-token'),
+    );
+    expect(refreshTokens.revoke).toHaveBeenCalledWith(verified);
+    expect(users.findById).toHaveBeenCalledWith(row.id);
+    expect(refreshTokens.issue).not.toHaveBeenCalled();
+    expect(accessTokens.sign).not.toHaveBeenCalled();
+  });
+
+  it('revokes the old token before issuing a new access token and a new refresh token', async () => {
+    const { service, users, refreshTokens, accessTokens } = setup();
+    refreshTokens.issue.mockReturnValue(rotated);
+
+    const result = await service.refresh('signed-refresh-token');
+
+    expect(result).toEqual({
+      accessToken: 'signed-access-token',
+      refreshToken: rotated,
+    });
+    expect(result.refreshToken.jti).not.toBe(verified.jti);
+    expect(refreshTokens.verify).toHaveBeenCalledWith('signed-refresh-token');
+    expect(refreshTokens.revoke).toHaveBeenCalledWith(verified);
+    expect(users.findById).toHaveBeenCalledWith(row.id);
+    expect(accessTokens.sign).toHaveBeenCalledWith({ userId: row.id });
+    expect(refreshTokens.issue).toHaveBeenCalledWith(row.id);
+    const [revokeOrder] = refreshTokens.revoke.mock.invocationCallOrder;
+    const [findOrder] = users.findById.mock.invocationCallOrder;
+    const [issueOrder] = refreshTokens.issue.mock.invocationCallOrder;
+    const [signOrder] = accessTokens.sign.mock.invocationCallOrder;
+    expect(revokeOrder).toBeLessThan(findOrder);
+    expect(revokeOrder).toBeLessThan(issueOrder);
+    expect(revokeOrder).toBeLessThan(signOrder);
+  });
+
+  it('propagates a database error raised while revoking, without issuing', async () => {
+    const { service, refreshTokens, accessTokens } = setup();
+    const error = new Error('connection refused');
+    refreshTokens.revoke.mockRejectedValue(error);
+
+    await expect(service.refresh('signed-refresh-token')).rejects.toBe(error);
+    expect(refreshTokens.issue).not.toHaveBeenCalled();
+    expect(accessTokens.sign).not.toHaveBeenCalled();
+  });
+
+  it('propagates a database error raised while loading the user, without issuing', async () => {
+    const { service, users, refreshTokens } = setup();
+    const error = new Error('connection refused');
+    users.findById.mockRejectedValue(error);
+
+    await expect(service.refresh('signed-refresh-token')).rejects.toBe(error);
+    expect(refreshTokens.issue).not.toHaveBeenCalled();
   });
 });
