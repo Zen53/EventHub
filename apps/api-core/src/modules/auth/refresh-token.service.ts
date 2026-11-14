@@ -5,6 +5,7 @@ import { JwtError, JwtSigner, JwtVerifier } from '@nestjs/authentication';
 import type { Env } from '../../core/config/env.schema.js';
 import { AppError } from '../../core/errors/app-error.js';
 import { TOKEN_ISSUER } from '../../core/security/index.js';
+import { RevokedRefreshTokensRepository } from './revoked-refresh-tokens.repository.js';
 
 export const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const REFRESH_TOKEN_AUDIENCE = 'eventhub-refresh';
@@ -27,7 +28,10 @@ export class RefreshTokenService {
   private readonly signer: JwtSigner;
   private readonly verifier: JwtVerifier;
 
-  constructor(config: ConfigService<Env, true>) {
+  constructor(
+    config: ConfigService<Env, true>,
+    private readonly revoked: RevokedRefreshTokensRepository,
+  ) {
     const key = config.get('JWT_ACCESS_SECRET', { infer: true });
     this.signer = new JwtSigner({
       key,
@@ -73,6 +77,14 @@ export class RefreshTokenService {
       throw invalidRefreshToken();
     }
     return { userId: sub, jti, expiresAt: new Date(exp * 1000) };
+  }
+
+  revoke({ jti, expiresAt }: VerifiedRefreshToken): Promise<boolean> {
+    return this.revoked.revoke(jti, expiresAt);
+  }
+
+  isRevoked(jti: string): Promise<boolean> {
+    return this.revoked.isRevoked(jti);
   }
 }
 

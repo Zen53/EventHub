@@ -9,6 +9,7 @@ import {
   REFRESH_TOKEN_TTL_MS,
   RefreshTokenService,
 } from './refresh-token.service.js';
+import type { RevokedRefreshTokensRepository } from './revoked-refresh-tokens.repository.js';
 
 const SECRET = 'test-only-access-secret-of-32-chars!';
 const USER_ID = 'a1b2c3d4-0000-4000-8000-000000000002';
@@ -19,8 +20,19 @@ const UUID =
 const configWith = (secret: string) =>
   ({ get: () => secret }) as unknown as ConfigService<Env, true>;
 
-const refreshService = (secret = SECRET) =>
-  new RefreshTokenService(configWith(secret));
+const revokedRepository = () => ({
+  revoke: vi.fn().mockResolvedValue(true),
+  isRevoked: vi.fn().mockResolvedValue(false),
+});
+
+const refreshService = (
+  secret = SECRET,
+  revoked: ReturnType<typeof revokedRepository> = revokedRepository(),
+) =>
+  new RefreshTokenService(
+    configWith(secret),
+    revoked as unknown as RevokedRefreshTokensRepository,
+  );
 
 const decode = (part: string) =>
   JSON.parse(Buffer.from(part, 'base64url').toString()) as Record<
@@ -215,6 +227,46 @@ describe('RefreshTokenService', () => {
       await expectInvalidRefreshToken(
         refreshService().verify(handMade({ ...validClaims(), ...override })),
       );
+    });
+  });
+
+  describe('revocation', () => {
+    const verified = {
+      userId: USER_ID,
+      jti: 'c1b2c3d4-0000-4000-8000-000000000003',
+      expiresAt: new Date('2026-11-20T10:00:00Z'),
+    };
+
+    it('revokes the jti until its expiration and returns whether it was newly revoked', async () => {
+      const revoked = revokedRepository();
+      revoked.revoke.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+      const service = refreshService(SECRET, revoked);
+
+      await expect(service.revoke(verified)).resolves.toBe(true);
+      await expect(service.revoke(verified)).resolves.toBe(false);
+      expect(revoked.revoke).toHaveBeenCalledWith(
+        verified.jti,
+        verified.expiresAt,
+      );
+    });
+
+    it('tells whether a jti is revoked', async () => {
+      const revoked = revokedRepository();
+      revoked.isRevoked.mockResolvedValue(true);
+
+      await expect(
+        refreshService(SECRET, revoked).isRevoked(verified.jti),
+      ).resolves.toBe(true);
+      expect(revoked.isRevoked).toHaveBeenCalledWith(verified.jti);
+    });
+
+    it('does not consult the revocation list in verify', async () => {
+      const revoked = revokedRepository();
+      const service = refreshService(SECRET, revoked);
+
+      await service.verify(service.issue(USER_ID).token);
+
+      expect(revoked.isRevoked).not.toHaveBeenCalled();
     });
   });
 });

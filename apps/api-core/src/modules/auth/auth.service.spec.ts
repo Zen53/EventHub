@@ -30,13 +30,30 @@ const issued = {
   expiresAt: new Date('2026-11-20T10:00:00Z'),
 };
 
+const verified = {
+  userId: row.id,
+  jti: issued.jti,
+  expiresAt: issued.expiresAt,
+};
+
+const invalidRefreshToken = () =>
+  new AppError(
+    401,
+    'INVALID_REFRESH_TOKEN',
+    'Refresh token absent, expiré ou déjà utilisé.',
+  );
+
 function setup() {
   const users = {
     create: vi.fn().mockResolvedValue(row),
     verifyCredentials: vi.fn().mockResolvedValue(row),
   };
   const accessTokens = { sign: vi.fn().mockReturnValue('signed-access-token') };
-  const refreshTokens = { issue: vi.fn().mockReturnValue(issued) };
+  const refreshTokens = {
+    issue: vi.fn().mockReturnValue(issued),
+    verify: vi.fn().mockResolvedValue(verified),
+    revoke: vi.fn().mockResolvedValue(true),
+  };
   const service = new AuthService(
     users as unknown as UsersService,
     accessTokens as unknown as AccessTokenService,
@@ -115,5 +132,74 @@ describe('AuthService.login', () => {
     );
     expect(accessTokens.sign).not.toHaveBeenCalled();
     expect(refreshTokens.issue).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthService.logout', () => {
+  it.each([undefined, ''])(
+    'does nothing without a cookie (%j)',
+    async (token) => {
+      const { service, refreshTokens } = setup();
+
+      await expect(service.logout(token)).resolves.toBeUndefined();
+      expect(refreshTokens.verify).not.toHaveBeenCalled();
+      expect(refreshTokens.revoke).not.toHaveBeenCalled();
+    },
+  );
+
+  it('revokes the jti of a valid token until its expiration', async () => {
+    const { service, refreshTokens } = setup();
+
+    await expect(
+      service.logout('signed-refresh-token'),
+    ).resolves.toBeUndefined();
+    expect(refreshTokens.verify).toHaveBeenCalledWith('signed-refresh-token');
+    expect(refreshTokens.revoke).toHaveBeenCalledWith({
+      userId: row.id,
+      jti: issued.jti,
+      expiresAt: issued.expiresAt,
+    });
+  });
+
+  it('succeeds without revoking an invalid or expired token', async () => {
+    const { service, refreshTokens } = setup();
+    refreshTokens.verify.mockRejectedValue(invalidRefreshToken());
+
+    await expect(service.logout('forged-token')).resolves.toBeUndefined();
+    expect(refreshTokens.revoke).not.toHaveBeenCalled();
+  });
+
+  it('succeeds for a token that was already revoked', async () => {
+    const { service, refreshTokens } = setup();
+    refreshTokens.revoke.mockResolvedValue(false);
+
+    await expect(
+      service.logout('signed-refresh-token'),
+    ).resolves.toBeUndefined();
+  });
+
+  it('propagates a database error raised while revoking', async () => {
+    const { service, refreshTokens } = setup();
+    const error = new Error('connection refused');
+    refreshTokens.revoke.mockRejectedValue(error);
+
+    await expect(service.logout('signed-refresh-token')).rejects.toBe(error);
+  });
+
+  it('propagates an unexpected error raised while verifying', async () => {
+    const { service, refreshTokens } = setup();
+    const error = new Error('unexpected');
+    refreshTokens.verify.mockRejectedValue(error);
+
+    await expect(service.logout('signed-refresh-token')).rejects.toBe(error);
+    expect(refreshTokens.revoke).not.toHaveBeenCalled();
+  });
+
+  it('propagates another AppError raised while verifying', async () => {
+    const { service, refreshTokens } = setup();
+    const error = new AppError(500, 'INTERNAL_ERROR', 'Erreur interne.');
+    refreshTokens.verify.mockRejectedValue(error);
+
+    await expect(service.logout('signed-refresh-token')).rejects.toBe(error);
   });
 });
