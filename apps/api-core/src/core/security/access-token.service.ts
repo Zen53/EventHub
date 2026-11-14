@@ -7,7 +7,7 @@ import type { AuthenticatedUser } from './authenticated-user.js';
 
 export const ACCESS_TOKEN_TTL = '15m';
 const ALGORITHM = 'HS256';
-const ISSUER = 'eventhub-api';
+export const TOKEN_ISSUER = 'eventhub-api';
 const AUDIENCE = 'eventhub-api';
 
 @Injectable()
@@ -20,14 +20,14 @@ export class AccessTokenService {
     this.signer = new JwtSigner({
       key,
       alg: ALGORITHM,
-      issuer: ISSUER,
+      issuer: TOKEN_ISSUER,
       audience: AUDIENCE,
       ttl: ACCESS_TOKEN_TTL,
     });
     this.verifier = new JwtVerifier({
       key,
       algorithms: [ALGORITHM],
-      issuer: ISSUER,
+      issuer: TOKEN_ISSUER,
       audience: AUDIENCE,
       required: ['exp', 'iat', 'sub'],
     });
