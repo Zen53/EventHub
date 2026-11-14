@@ -8,9 +8,12 @@ import {
   RefreshTokenService,
 } from './refresh-token.service.js';
 
-export interface LoginResult {
+export interface RefreshResult {
   accessToken: string;
   refreshToken: IssuedRefreshToken;
+}
+
+export interface LoginResult extends RefreshResult {
   user: UserRow;
 }
 
@@ -56,7 +59,31 @@ export class AuthService {
       await this.refreshTokens.revoke(verified);
     }
   }
+
+  async refresh(token: string | undefined): Promise<RefreshResult> {
+    if (!token) {
+      throw invalidRefreshToken();
+    }
+    const verified = await this.refreshTokens.verify(token);
+    if (!(await this.refreshTokens.revoke(verified))) {
+      throw invalidRefreshToken();
+    }
+    const user = await this.users.findById(verified.userId);
+    if (!user) {
+      throw invalidRefreshToken();
+    }
+    const accessToken = this.accessTokens.sign({ userId: user.id });
+    const refreshToken = this.refreshTokens.issue(user.id);
+    return { accessToken, refreshToken };
+  }
 }
 
-const isInvalidRefreshToken = (error: unknown) =>
+const invalidRefreshToken = () =>
+  new AppError(
+    401,
+    'INVALID_REFRESH_TOKEN',
+    'Refresh token absent, expiré ou déjà utilisé.',
+  );
+
+export const isInvalidRefreshToken = (error: unknown) =>
   error instanceof AppError && error.code === 'INVALID_REFRESH_TOKEN';

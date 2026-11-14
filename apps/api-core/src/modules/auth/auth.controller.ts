@@ -11,6 +11,7 @@ import {
   type LoginBody,
   loginBodySchema,
   type LoginResponse,
+  type RefreshResponse,
   type RegisterBody,
   registerBodySchema,
   type User,
@@ -18,7 +19,7 @@ import {
 import type { Request, Response } from 'express';
 import { Public } from '../../core/security/index.js';
 import { toUserResponse } from '../users/index.js';
-import { AuthService } from './auth.service.js';
+import { AuthService, isInvalidRefreshToken } from './auth.service.js';
 import {
   clearRefreshTokenCookie,
   REFRESH_TOKEN_COOKIE,
@@ -51,14 +52,39 @@ export class AuthController {
   }
 
   @Public()
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  async refresh(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<RefreshResponse> {
+    try {
+      const { accessToken, refreshToken } = await this.auth.refresh(
+        refreshTokenOf(request),
+      );
+      setRefreshTokenCookie(response, refreshToken.token);
+      return { accessToken };
+    } catch (error) {
+      if (isInvalidRefreshToken(error)) {
+        clearRefreshTokenCookie(response);
+      }
+      throw error;
+    }
+  }
+
+  @Public()
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
   async logout(
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<void> {
-    const token: unknown = request.cookies?.[REFRESH_TOKEN_COOKIE];
-    await this.auth.logout(typeof token === 'string' ? token : undefined);
+    await this.auth.logout(refreshTokenOf(request));
     clearRefreshTokenCookie(response);
   }
 }
+
+const refreshTokenOf = (request: Request): string | undefined => {
+  const token: unknown = request.cookies?.[REFRESH_TOKEN_COOKIE];
+  return typeof token === 'string' ? token : undefined;
+};

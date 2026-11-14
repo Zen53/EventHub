@@ -92,7 +92,7 @@ describe('RevokedRefreshTokensRepository', () => {
       });
     });
 
-    it('deletes the rows whose expiration has passed before inserting', async () => {
+    it('deletes the rows expired for more than an hour before inserting', async () => {
       const { repository, db, deleteQuery } = setup();
 
       await repository.revoke(JTI, EXPIRES_AT);
@@ -100,9 +100,25 @@ describe('RevokedRefreshTokensRepository', () => {
       expect(db.delete).toHaveBeenCalledWith(revokedRefreshTokens);
       const { sql, params } = render(deleteQuery.where.mock.calls[0][0] as SQL);
       expect(sql).toBe('"revoked_refresh_tokens"."expires_at" < $1');
-      expect(params).toEqual([NOW.toISOString()]);
+      expect(params).toEqual([
+        new Date(NOW.getTime() - 60 * 60 * 1000).toISOString(),
+      ]);
       expect(db.delete.mock.invocationCallOrder[0]).toBeLessThan(
         db.insert.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('keeps a jti revoked just before its expiration when another revoke runs just after it', async () => {
+      const { repository, deleteQuery } = setup();
+      const expiringAt = new Date(NOW.getTime() + 10);
+
+      await expect(repository.revoke(JTI, expiringAt)).resolves.toBe(true);
+      vi.setSystemTime(new Date(NOW.getTime() + 20));
+      await expect(repository.revoke(JTI, expiringAt)).resolves.toBe(false);
+
+      const { params } = render(deleteQuery.where.mock.calls[1][0] as SQL);
+      expect(new Date(params[0] as string).getTime()).toBeLessThan(
+        expiringAt.getTime(),
       );
     });
 
