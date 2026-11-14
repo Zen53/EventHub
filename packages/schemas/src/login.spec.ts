@@ -58,9 +58,15 @@ describe('loginBodySchema', () => {
     expect(issuesOf({ ...body, ...patch })).toContainEqual({ path, message });
   });
 
-  it('rejects an unknown field', () => {
-    expect(issuesOf({ ...body, rememberMe: true })).toEqual([
-      { path: '', message: 'Champ inconnu : rememberMe.' },
+  it('rejects an unknown field with its key', () => {
+    const result = loginBodySchema.safeParse({ ...body, rememberMe: true });
+
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({
+        code: 'unrecognized_keys',
+        path: [],
+        keys: ['rememberMe'],
+      }),
     ]);
   });
 
