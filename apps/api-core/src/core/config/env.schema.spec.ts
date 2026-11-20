@@ -18,7 +18,7 @@ describe('envSchema', () => {
   it('applies defaults when NODE_ENV and PORT are missing', () => {
     expect(envSchema.parse(required)).toEqual({
       NODE_ENV: 'development',
-      PORT: 3000,
+      PORT: 3001,
       ...required,
     });
   });
