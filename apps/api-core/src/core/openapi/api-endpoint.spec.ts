@@ -133,6 +133,12 @@ describe('ApiEndpoint', () => {
 
     expect(description).toContain('INVALID_CREDENTIALS');
     expect(description).toContain('INVALID_REFRESH_TOKEN');
+    expect(
+      Object.keys(
+        response('/items', 'post', '401').content?.['application/json']
+          ?.examples ?? {},
+      ),
+    ).toEqual(['INVALID_CREDENTIALS', 'INVALID_REFRESH_TOKEN']);
   });
 
   it('documents a protected route without ApiEndpoint', () => {

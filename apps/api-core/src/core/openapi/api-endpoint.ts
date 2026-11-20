@@ -1,17 +1,17 @@
-import { errorCatalog, type ErrorCode } from '@eventhub/schemas';
+import type { ErrorCode } from '@eventhub/schemas';
 import {
   SerializeOptions,
   type StandardSchemaSerializerContextOptions,
 } from '@nestjs/common';
-import { ApiOperation, ApiResponse, type HeadersObject } from '@nestjs/swagger';
+import {
+  ApiExtension,
+  ApiOperation,
+  type HeadersObject,
+} from '@nestjs/swagger';
 
 const OPENAPI_METADATA_FACTORY = '_OPENAPI_METADATA_FACTORY';
 
-export const ERROR_RESPONSE_COMPONENT = 'ErrorResponse';
-
-export const errorResponseRef = {
-  $ref: `#/components/schemas/${ERROR_RESPONSE_COMPONENT}`,
-};
+export const ERROR_CODES_EXTENSION = 'x-error-codes';
 
 type MetadataFactory = () => Record<string, object>;
 
@@ -37,20 +37,6 @@ export type TypedMethodDecorator<R> = <T extends EndpointHandler<R>>(
   methodKey: string | symbol,
   descriptor: TypedPropertyDescriptor<T>,
 ) => void;
-
-export const describeErrors = (codes: ErrorCode[]): string =>
-  codes
-    .map((code) => `\`${code}\` : ${errorCatalog[code].message}`)
-    .join('\n\n');
-
-const errorsByStatus = (codes: ErrorCode[]): Map<number, ErrorCode[]> => {
-  const groups = new Map<number, ErrorCode[]>();
-  for (const code of codes) {
-    const { status } = errorCatalog[code];
-    groups.set(status, [...(groups.get(status) ?? []), code]);
-  }
-  return groups;
-};
 
 const documentSuccessResponse = (
   controller: object,
@@ -89,12 +75,12 @@ export function ApiEndpoint(
     if (response) {
       SerializeOptions({ schema: response })(target, methodKey, descriptor);
     }
-    for (const [status, codes] of errorsByStatus(errors)) {
-      ApiResponse({
-        status,
-        description: describeErrors(codes),
-        schema: errorResponseRef,
-      })(target, methodKey, descriptor);
+    if (errors.length > 0) {
+      ApiExtension(ERROR_CODES_EXTENSION, errors)(
+        target,
+        methodKey,
+        descriptor,
+      );
     }
     documentSuccessResponse(target.constructor, methodKey, {
       standardSchema: response,

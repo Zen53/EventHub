@@ -17,11 +17,13 @@ import { STATUS_CODES } from 'node:http';
 import { z } from 'zod';
 import type { Env } from '../config/env.schema.js';
 import { IS_PUBLIC_KEY } from '../security/public.decorator.js';
-import {
-  describeErrors,
-  ERROR_RESPONSE_COMPONENT,
-  errorResponseRef,
-} from './api-endpoint.js';
+import { ERROR_CODES_EXTENSION } from './api-endpoint.js';
+
+const ERROR_RESPONSE_COMPONENT = 'ErrorResponse';
+
+type DocumentedOperation = OperationObject & {
+  [ERROR_CODES_EXTENSION]?: ErrorCode[];
+};
 
 const HTTP_METHODS = [
   'get',
@@ -69,18 +71,45 @@ const publicOperationIds = (app: INestApplication): Map<string, boolean> => {
   return new Map(entries);
 };
 
+const describeError = (code: ErrorCode): string =>
+  `\`${code}\` : ${errorCatalog[code].message}`;
+
+const errorExample = (code: ErrorCode) => ({
+  summary: code,
+  value: {
+    error: {
+      code,
+      message: errorCatalog[code].message,
+      details:
+        code === 'VALIDATION_ERROR'
+          ? [{ field: 'email', message: "L'email n'est pas valide." }]
+          : null,
+    },
+  },
+});
+
 const addError = (operation: OperationObject, code: ErrorCode): void => {
   const status = String(errorCatalog[code].status);
   const existing = operation.responses[status];
   if (!existing) {
     operation.responses[status] = {
-      description: describeErrors([code]),
-      content: { 'application/json': { schema: errorResponseRef } },
+      description: describeError(code),
+      content: {
+        'application/json': {
+          schema: { $ref: `#/components/schemas/${ERROR_RESPONSE_COMPONENT}` },
+          examples: { [code]: errorExample(code) },
+        },
+      },
     };
     return;
   }
-  if ('description' in existing && !existing.description.includes(code)) {
-    existing.description = `${existing.description}\n\n${describeErrors([code])}`;
+  if (!('description' in existing) || existing.description.includes(code)) {
+    return;
+  }
+  existing.description = `${existing.description}\n\n${describeError(code)}`;
+  const media = existing.content?.['application/json'];
+  if (media) {
+    media.examples = { ...media.examples, [code]: errorExample(code) };
   }
 };
 
@@ -93,9 +122,14 @@ const describeEmptyResponses = (operation: OperationObject): void => {
 };
 
 const completeOperation = (
-  operation: OperationObject,
+  operation: DocumentedOperation,
   isPublic: boolean | undefined,
 ): void => {
+  const declared = operation[ERROR_CODES_EXTENSION] ?? [];
+  delete operation[ERROR_CODES_EXTENSION];
+  for (const code of declared) {
+    addError(operation, code);
+  }
   if (isPublic) {
     operation.security ??= [];
   } else if (isPublic === false) {

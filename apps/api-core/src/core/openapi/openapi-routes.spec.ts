@@ -203,6 +203,23 @@ describe('OpenAPI documentation of the auth and /me routes', () => {
     );
   });
 
+  it.each([
+    [routes[0], '409', 'EMAIL_ALREADY_USED'],
+    [routes[1], '400', 'VALIDATION_ERROR'],
+    [routes[2], '401', 'INVALID_REFRESH_TOKEN'],
+    [routes[4], '401', 'UNAUTHORIZED'],
+  ] as const)('shows %j %s with a %s example', (route, status, code) => {
+    const examples = response(route, status).content?.['application/json']
+      ?.examples as Record<string, { value: { error: { code: string } } }>;
+
+    expect(Object.keys(examples)).toEqual([code]);
+    expect(examples[code]?.value.error.code).toBe(code);
+  });
+
+  it('removes the error codes extension from the document', () => {
+    expect(JSON.stringify(document)).not.toContain('x-error-codes');
+  });
+
   it('declares the shared ErrorResponse component once', () => {
     expect(document.components?.schemas).toHaveProperty('ErrorResponse');
   });
