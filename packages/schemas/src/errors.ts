@@ -1,6 +1,6 @@
 import { z } from 'zod';
+import { errorCodeSchema } from './error-catalog.js';
 
-/** One invalid field of a `VALIDATION_ERROR`; `field` is the path joined by dots. */
 export const fieldErrorSchema = z.object({
   field: z.string(),
   message: z.string(),
@@ -8,10 +8,9 @@ export const fieldErrorSchema = z.object({
 
 export type FieldError = z.infer<typeof fieldErrorSchema>;
 
-/** Body of every API error: see "Format des erreurs" in docs/contrat-user.md. */
 export const errorResponseSchema = z.object({
   error: z.object({
-    code: z.string(),
+    code: errorCodeSchema,
     message: z.string(),
     details: z.array(fieldErrorSchema).nullable(),
   }),
