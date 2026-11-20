@@ -2,6 +2,7 @@ import type { INestApplication } from '@nestjs/common';
 import type {
   OpenAPIObject,
   OperationObject,
+  ReferenceObject,
   ResponseObject,
   SchemaObject,
 } from '@nestjs/swagger';
@@ -42,11 +43,22 @@ describe('OpenAPI documentation of the auth and /me routes', () => {
     return found;
   };
 
+  const resolve = (
+    schema: SchemaObject | ReferenceObject | undefined,
+  ): SchemaObject | undefined => {
+    if (!schema || !('$ref' in schema)) {
+      return schema;
+    }
+    const name = schema.$ref.replace('#/components/schemas/', '');
+    return resolve(document.components?.schemas?.[name]);
+  };
+
   const jsonSchema = (route: Route, status: string): SchemaObject => {
-    const schema = response(route, status).content?.['application/json']
-      ?.schema;
-    if (!schema || '$ref' in schema) {
-      throw new Error(`No inline schema for ${status} on ${route.join(' ')}`);
+    const schema = resolve(
+      response(route, status).content?.['application/json']?.schema,
+    );
+    if (!schema) {
+      throw new Error(`No schema for ${status} on ${route.join(' ')}`);
     }
     return schema;
   };
@@ -58,9 +70,13 @@ describe('OpenAPI documentation of the auth and /me routes', () => {
     expect(response(route, status).description).toContain(code);
     const schema = jsonSchema(route, status);
     expect(propertiesOf(schema)).toEqual(['error']);
-    expect(propertiesOf(schema.properties?.error as SchemaObject)).toEqual(
+    const error = schema.properties?.error as SchemaObject;
+    expect(propertiesOf(error)).toEqual(
       expect.arrayContaining(['code', 'message', 'details']),
     );
+    expect(
+      (error.properties?.code as SchemaObject | undefined)?.enum,
+    ).toContain(code);
   };
 
   beforeAll(async () => {
@@ -152,24 +168,27 @@ describe('OpenAPI documentation of the auth and /me routes', () => {
     expectErrorResponse(routes[4], '401', 'UNAUTHORIZED');
   });
 
+  it('requires the bearer access token by default', () => {
+    expect(document.security).toEqual([{ bearer: [] }]);
+  });
+
   it.each([
-    [routes[0], undefined],
-    [routes[1], undefined],
+    [routes[0], []],
+    [routes[1], []],
     [routes[2], [{ cookie: [] }]],
     [routes[3], [{ cookie: [] }]],
-    [routes[4], [{ bearer: [] }]],
+    [routes[4], undefined],
   ] as const)('declares the security of %j', (route, security) => {
     expect(operation(route).security).toEqual(security);
   });
 
-  it('does not require the bearer token on public routes', () => {
-    expect(document.security).toBeUndefined();
-    const publicRoutes = routes.slice(0, 4);
+  it('documents 400 VALIDATION_ERROR only on routes with a body', () => {
+    expect(routes.filter((route) => operation(route).responses['400'])).toEqual(
+      [routes[0], routes[1]],
+    );
+  });
 
-    for (const route of publicRoutes) {
-      expect(JSON.stringify(operation(route).security ?? [])).not.toContain(
-        'bearer',
-      );
-    }
+  it('declares the shared ErrorResponse component once', () => {
+    expect(document.components?.schemas).toHaveProperty('ErrorResponse');
   });
 });

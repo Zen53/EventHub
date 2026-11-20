@@ -19,16 +19,9 @@ import {
   type User,
   userSchema,
 } from '@eventhub/schemas';
-import {
-  ApiCookieAuth,
-  ApiCreatedResponse,
-  ApiNoContentResponse,
-  ApiOkResponse,
-  ApiOperation,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
-import { ApiErrorResponses } from '../../core/openapi/api-error-responses.js';
+import { ApiEndpoint } from '../../core/openapi/api-endpoint.js';
 import { Public } from '../../core/security/index.js';
 import { toUserResponse } from '../users/index.js';
 import { AuthService, isInvalidRefreshToken } from './auth.service.js';
@@ -37,12 +30,6 @@ import {
   REFRESH_TOKEN_COOKIE,
   setRefreshTokenCookie,
 } from './refresh-token.cookie.js';
-
-const VALIDATION_ERROR = {
-  status: HttpStatus.BAD_REQUEST,
-  code: 'VALIDATION_ERROR',
-  description: 'un ou plusieurs champs sont invalides (`details` rempli).',
-};
 
 const setRefreshTokenCookieHeader = {
   'Set-Cookie': {
@@ -66,16 +53,10 @@ export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   @Public()
-  @ApiOperation({ summary: 'Créer un compte' })
-  @ApiCreatedResponse({
-    description:
-      'Le `User` créé. L’utilisateur n’est pas connecté : aucun token n’est émis.',
-    standardSchema: userSchema,
-  })
-  @ApiErrorResponses(VALIDATION_ERROR, {
-    status: HttpStatus.CONFLICT,
-    code: 'EMAIL_ALREADY_USED',
-    description: 'email déjà associé à un autre compte.',
+  @ApiEndpoint('Créer un compte', {
+    description: 'L’utilisateur n’est pas connecté : aucun token n’est émis.',
+    response: userSchema,
+    errors: ['EMAIL_ALREADY_USED'],
   })
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
@@ -86,18 +67,12 @@ export class AuthController {
   }
 
   @Public()
-  @ApiOperation({ summary: 'Se connecter' })
-  @ApiOkResponse({
+  @ApiEndpoint('Se connecter', {
     description:
-      'L’access token et le `User`. Le refresh token est posé en cookie.',
-    standardSchema: loginResponseSchema,
+      'Renvoie l’access token et le `User`, et pose le refresh token en cookie. Le message d’erreur est le même que l’email soit inconnu ou que le mot de passe soit faux.',
+    response: loginResponseSchema,
     headers: setRefreshTokenCookieHeader,
-  })
-  @ApiErrorResponses(VALIDATION_ERROR, {
-    status: HttpStatus.UNAUTHORIZED,
-    code: 'INVALID_CREDENTIALS',
-    description:
-      'email ou mot de passe incorrect, avec le même message dans les deux cas.',
+    errors: ['INVALID_CREDENTIALS'],
   })
   @Post('login')
   @HttpCode(HttpStatus.OK)
@@ -111,19 +86,13 @@ export class AuthController {
   }
 
   @Public()
-  @ApiOperation({ summary: 'Renouveler l’access token' })
   @ApiCookieAuth()
-  @ApiOkResponse({
+  @ApiEndpoint('Renouveler l’access token', {
     description:
-      'Un nouvel access token. Le refresh token est renouvelé (rotation) et l’ancien est invalidé.',
-    standardSchema: refreshResponseSchema,
+      'Émet un nouveau refresh token (rotation) et invalide l’ancien. Le cookie est supprimé quand le refresh token est refusé.',
+    response: refreshResponseSchema,
     headers: setRefreshTokenCookieHeader,
-  })
-  @ApiErrorResponses({
-    status: HttpStatus.UNAUTHORIZED,
-    code: 'INVALID_REFRESH_TOKEN',
-    description:
-      'refresh token absent, expiré ou déjà utilisé. Le cookie est supprimé quand il était présent.',
+    errors: ['INVALID_REFRESH_TOKEN'],
   })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
@@ -146,11 +115,10 @@ export class AuthController {
   }
 
   @Public()
-  @ApiOperation({ summary: 'Se déconnecter' })
   @ApiCookieAuth()
-  @ApiNoContentResponse({
+  @ApiEndpoint('Se déconnecter', {
     description:
-      'Sans corps. Le refresh token est invalidé et le cookie supprimé, même si le token était déjà invalide.',
+      'Invalide le refresh token et supprime le cookie. Répond 204 même si le token était déjà invalide.',
     headers: clearRefreshTokenCookieHeader,
   })
   @Post('logout')
