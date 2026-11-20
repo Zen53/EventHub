@@ -3,7 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module.js';
 import type { Env } from './core/config/env.schema.js';
-import { setupOpenApi } from './core/openapi/index.js';
+import { setupOpenApi } from './core/openapi/openapi.js';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
