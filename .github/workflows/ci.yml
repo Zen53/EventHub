@@ -22,6 +22,30 @@ jobs:
       - name: Lint api-core
         run: pnpm lint:api
 
+  typecheck:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: ./.github/actions/setup
+
+      - name: Typecheck api-core
+        run: pnpm typecheck:api
+
+  format:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: ./.github/actions/setup
+
+      - name: Check api-core formatting
+        run: pnpm format:check:api
+
   tests:
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
