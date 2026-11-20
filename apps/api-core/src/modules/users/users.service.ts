@@ -38,11 +38,7 @@ export class UsersService implements OnModuleInit {
       passwordHash,
     });
     if (!row) {
-      throw new AppError(
-        409,
-        'EMAIL_ALREADY_USED',
-        'Cet email est déjà associé à un compte.',
-      );
+      throw new AppError('EMAIL_ALREADY_USED');
     }
     return row;
   }

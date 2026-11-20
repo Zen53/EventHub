@@ -1,14 +1,18 @@
-import type { FieldError } from '@eventhub/schemas';
+import {
+  errorCatalog,
+  type ErrorCode,
+  type FieldError,
+} from '@eventhub/schemas';
 
-/** Business error, rendered by the global filter as `{ error: { code, message, details } }`. */
 export class AppError extends Error {
+  readonly status: number;
+
   constructor(
-    readonly status: number,
-    readonly code: string,
-    message: string,
+    readonly code: ErrorCode,
     readonly details: FieldError[] | null = null,
   ) {
-    super(message);
+    super(errorCatalog[code].message);
     this.name = 'AppError';
+    this.status = errorCatalog[code].status;
   }
 }
