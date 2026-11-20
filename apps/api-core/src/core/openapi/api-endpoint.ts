@@ -15,12 +15,28 @@ export const errorResponseRef = {
 
 type MetadataFactory = () => Record<string, object>;
 
-export interface ApiEndpointOptions {
+export type ResponseSchema = NonNullable<
+  StandardSchemaSerializerContextOptions['schema']
+>;
+
+export type ResponseOf<S extends ResponseSchema> = NonNullable<
+  S['~standard']['types']
+>['output'];
+
+export type EndpointHandler<R> = (...args: never[]) => R | Promise<R>;
+
+export interface ApiEndpointOptions<S extends ResponseSchema | undefined> {
   description?: string;
-  response?: StandardSchemaSerializerContextOptions['schema'];
+  response?: S;
   headers?: HeadersObject;
   errors?: ErrorCode[];
 }
+
+export type TypedMethodDecorator<R> = <T extends EndpointHandler<R>>(
+  target: object,
+  methodKey: string | symbol,
+  descriptor: TypedPropertyDescriptor<T>,
+) => void;
 
 export const describeErrors = (codes: ErrorCode[]): string =>
   codes
@@ -51,12 +67,24 @@ const documentSuccessResponse = (
   });
 };
 
-export const ApiEndpoint =
-  (
-    summary: string,
-    { description, response, headers, errors = [] }: ApiEndpointOptions = {},
-  ): MethodDecorator =>
-  (target, methodKey, descriptor) => {
+export function ApiEndpoint<S extends ResponseSchema>(
+  summary: string,
+  options: ApiEndpointOptions<S> & { response: S },
+): TypedMethodDecorator<ResponseOf<S>>;
+export function ApiEndpoint(
+  summary: string,
+  options?: ApiEndpointOptions<undefined>,
+): MethodDecorator;
+export function ApiEndpoint(
+  summary: string,
+  {
+    description,
+    response,
+    headers,
+    errors = [],
+  }: ApiEndpointOptions<ResponseSchema | undefined> = {},
+): MethodDecorator {
+  return (target, methodKey, descriptor) => {
     ApiOperation({ summary, description })(target, methodKey, descriptor);
     if (response) {
       SerializeOptions({ schema: response })(target, methodKey, descriptor);
@@ -73,3 +101,4 @@ export const ApiEndpoint =
       headers,
     });
   };
+}

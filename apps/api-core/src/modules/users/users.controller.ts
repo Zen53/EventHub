@@ -1,4 +1,4 @@
-import { type User, userSchema } from '@eventhub/schemas';
+import { userSchema } from '@eventhub/schemas';
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { AppError } from '../../core/errors/app-error.js';
@@ -17,7 +17,7 @@ export class UsersController {
 
   @ApiEndpoint('Consulter mon profil', { response: userSchema })
   @Get()
-  async getMe(@CurrentUser() { userId }: AuthenticatedUser): Promise<User> {
+  async getMe(@CurrentUser() { userId }: AuthenticatedUser) {
     const row = await this.users.findById(userId);
     if (!row) {
       throw new AppError('UNAUTHORIZED');

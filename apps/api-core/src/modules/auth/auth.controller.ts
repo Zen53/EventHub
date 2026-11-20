@@ -10,13 +10,10 @@ import {
 import {
   type LoginBody,
   loginBodySchema,
-  type LoginResponse,
   loginResponseSchema,
-  type RefreshResponse,
   refreshResponseSchema,
   type RegisterBody,
   registerBodySchema,
-  type User,
   userSchema,
 } from '@eventhub/schemas';
 import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
@@ -60,9 +57,7 @@ export class AuthController {
   })
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
-  async register(
-    @Body({ schema: registerBodySchema }) body: RegisterBody,
-  ): Promise<User> {
+  async register(@Body({ schema: registerBodySchema }) body: RegisterBody) {
     return toUserResponse(await this.auth.register(body));
   }
 
@@ -79,7 +74,7 @@ export class AuthController {
   async login(
     @Body({ schema: loginBodySchema }) body: LoginBody,
     @Res({ passthrough: true }) response: Response,
-  ): Promise<LoginResponse> {
+  ) {
     const { accessToken, refreshToken, user } = await this.auth.login(body);
     setRefreshTokenCookie(response, refreshToken.token);
     return { accessToken, user: toUserResponse(user) };
@@ -99,7 +94,7 @@ export class AuthController {
   async refresh(
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
-  ): Promise<RefreshResponse> {
+  ) {
     try {
       const { accessToken, refreshToken } = await this.auth.refresh(
         refreshTokenOf(request),

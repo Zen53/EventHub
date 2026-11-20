@@ -19,10 +19,16 @@ import request from 'supertest';
 import { z } from 'zod';
 import { CoreModule } from '../core.module.js';
 import { Public } from '../security/index.js';
-import { ApiEndpoint } from './api-endpoint.js';
+import {
+  ApiEndpoint,
+  type EndpointHandler,
+  type ResponseOf,
+} from './api-endpoint.js';
 import { createOpenApiDocument } from './openapi.js';
 
 const itemSchema = z.object({ id: z.string(), name: z.string() });
+
+type Item = z.output<typeof itemSchema>;
 
 @Controller('items')
 class ItemsController {
@@ -32,7 +38,7 @@ class ItemsController {
     errors: ['INVALID_CREDENTIALS', 'INVALID_REFRESH_TOKEN'],
   })
   @Post()
-  create(): object {
+  create() {
     return { id: '1', name: 'a', secret: 'hidden' };
   }
 
@@ -40,8 +46,8 @@ class ItemsController {
   @HttpCode(HttpStatus.OK)
   @Post('search')
   @ApiEndpoint('Chercher', { response: itemSchema })
-  search(): object {
-    return { id: 1 };
+  search() {
+    return { id: 1 } as unknown as Item;
   }
 
   @Get()
@@ -163,5 +169,15 @@ describe('ApiEndpoint', () => {
     });
     expect(logError).toHaveBeenCalledOnce();
     logError.mockRestore();
+  });
+
+  it('requires the handler to return what the response schema describes', () => {
+    type ItemHandler = EndpointHandler<ResponseOf<typeof itemSchema>>;
+
+    expectTypeOf<ResponseOf<typeof itemSchema>>().toEqualTypeOf<Item>();
+    expectTypeOf<() => Promise<Item>>().toExtend<ItemHandler>();
+    expectTypeOf<(id: string) => Item>().toExtend<ItemHandler>();
+    expectTypeOf<() => Promise<{ id: number }>>().not.toExtend<ItemHandler>();
+    expectTypeOf<() => Promise<void>>().not.toExtend<ItemHandler>();
   });
 });
