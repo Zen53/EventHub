@@ -1,7 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  async rewrites() {
+    return [
+      {
+        source: "/auth/:path*",
+        destination: `${process.env.API_URL ?? "http://localhost:3001"}/auth/:path*`,
+      },
+    ];
+  },
   experimental: {
     agentFeedback: true,
   },

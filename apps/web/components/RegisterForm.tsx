@@ -1,6 +1,7 @@
 "use client";
 
-import { registerBodySchema } from "@eventhub/schemas";
+import { errorResponseSchema, registerBodySchema } from "@eventhub/schemas";
+import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 type Field = "firstName" | "lastName" | "email" | "password" | "phone";
@@ -26,19 +27,34 @@ const emptyValues: Record<Field, string> = {
   phone: "",
 };
 
+const fields: readonly Field[] = [
+  "firstName",
+  "lastName",
+  "email",
+  "password",
+  "phone",
+];
+
+function isField(value: string): value is Field {
+  return fields.includes(value as Field);
+}
+
 export default function RegisterForm() {
+  const router = useRouter();
   const [values, setValues] = useState(emptyValues);
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({});
-  const [valid, setValid] = useState(false);
+  const [formError, setFormError] = useState<string>();
+  const [submitting, setSubmitting] = useState(false);
 
   function update(field: Field, value: string) {
     setValues((current) => ({ ...current, [field]: value }));
     setErrors((current) => ({ ...current, [field]: undefined }));
-    setValid(false);
+    setFormError(undefined);
   }
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setFormError(undefined);
 
     const phone = toInternationalPhone(values.phone);
     const result = registerBodySchema.safeParse({
@@ -53,17 +69,58 @@ export default function RegisterForm() {
       const next: Partial<Record<Field, string>> = {};
       for (const issue of result.error.issues) {
         const key = issue.path[0];
-        if (typeof key === "string" && next[key as Field] === undefined) {
-          next[key as Field] = key === "phone" ? phoneError : issue.message;
+        if (typeof key === "string" && isField(key) && next[key] === undefined) {
+          next[key] = key === "phone" ? phoneError : issue.message;
         }
       }
       setErrors(next);
-      setValid(false);
       return;
     }
 
     setErrors({});
-    setValid(true);
+    setSubmitting(true);
+    try {
+      const response = await fetch("/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(result.data),
+      });
+
+      if (response.status === 201) {
+        router.push("/connexion");
+        return;
+      }
+
+      const payload = errorResponseSchema.safeParse(await response.json());
+      if (!payload.success) {
+        setFormError("Inscription impossible pour le moment.");
+        return;
+      }
+
+      const { code, message, details } = payload.data.error;
+      if (code === "EMAIL_ALREADY_USED") {
+        setErrors({ email: message });
+        return;
+      }
+
+      const next: Partial<Record<Field, string>> = {};
+      for (const detail of details ?? []) {
+        if (isField(detail.field) && next[detail.field] === undefined) {
+          next[detail.field] =
+            detail.field === "phone" ? phoneError : detail.message;
+        }
+      }
+      if (Object.keys(next).length > 0) {
+        setErrors(next);
+        return;
+      }
+
+      setFormError(message || "Inscription impossible pour le moment.");
+    } catch {
+      setFormError("Inscription impossible pour le moment.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -133,18 +190,18 @@ export default function RegisterForm() {
         onChange={(value) => update("phone", value)}
       />
 
-      {valid ? (
-        <p className="rounded-2xl bg-[#e7f6ee] px-4 py-3 text-sm text-[#166534]">
-          Formulaire valide. La création du compte sera envoyée à l’API au
-          ticket suivant.
+      {formError ? (
+        <p className="rounded-2xl bg-[#fde8e4] px-4 py-3 text-sm text-[#c2410c]">
+          {formError}
         </p>
       ) : null}
 
       <button
         type="submit"
-        className="mt-1 h-12 rounded-xl bg-[#e24a1b] text-sm font-semibold text-white transition hover:bg-[#c73d14]"
-      > 
-        Créer mon compte
+        disabled={submitting}
+        className="mt-1 h-12 rounded-xl bg-[#e24a1b] text-sm font-semibold text-white transition hover:bg-[#c73d14] disabled:opacity-60"
+      >
+        {submitting ? "Création du compte…" : "Créer mon compte"}
       </button>
     </form>
   );
