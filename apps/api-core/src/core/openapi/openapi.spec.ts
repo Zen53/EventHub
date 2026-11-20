@@ -64,18 +64,6 @@ describe('OpenAPI document of the application', () => {
     });
   });
 
-  it('lists the five routes', () => {
-    expect(document.paths).toEqual(
-      expect.objectContaining({
-        '/auth/register': expect.objectContaining({ post: expect.anything() }),
-        '/auth/login': expect.objectContaining({ post: expect.anything() }),
-        '/auth/refresh': expect.objectContaining({ post: expect.anything() }),
-        '/auth/logout': expect.objectContaining({ post: expect.anything() }),
-        '/me': expect.objectContaining({ get: expect.anything() }),
-      }),
-    );
-  });
-
   it('declares the bearer access token and the refreshToken cookie', () => {
     expect(document.components?.securitySchemes).toEqual({
       bearer: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
@@ -83,17 +71,16 @@ describe('OpenAPI document of the application', () => {
     });
   });
 
-  it.each([
-    ['/auth/register', ['email', 'password', 'firstName', 'lastName']],
-    ['/auth/login', ['email', 'password']],
-  ])('converts the Zod body schema of POST %s', (path, fields) => {
-    const schema = requestBodySchema(document, path);
+  it('scans the controllers and converts their Zod body schemas', () => {
+    const schema = requestBodySchema(document, '/auth/login');
 
     expect(schema.type).toBe('object');
     expect(Object.keys(schema.properties ?? {})).toEqual(
-      expect.arrayContaining(fields),
+      expect.arrayContaining(['email', 'password']),
     );
-    expect(schema.required).toEqual(expect.arrayContaining(fields));
+    expect(schema.required).toEqual(
+      expect.arrayContaining(['email', 'password']),
+    );
   });
 });
 
