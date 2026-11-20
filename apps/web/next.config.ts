@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
@@ -12,6 +13,9 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {
+    // Racine du dépôt : sans elle, Turbopack refuse de résoudre packages/schemas
+    // (lien hors de apps/web) quand aucun lockfile parent ne l'englobe, ex. en Docker.
+    root: path.join(__dirname, "../.."),
     rules: {
       "*.css": {
         loaders: ["@tailwindcss/turbopack"],
