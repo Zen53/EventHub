@@ -3,8 +3,7 @@ name: Tests
 on:
   pull_request:
     branches: [development, main]
-  push:
-    branches: [development, main]
+    types: [opened, reopened, synchronize, ready_for_review]
 
 concurrency:
   group: tests-${{ github.ref }}
@@ -12,6 +11,7 @@ concurrency:
 
 jobs:
   tests:
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
