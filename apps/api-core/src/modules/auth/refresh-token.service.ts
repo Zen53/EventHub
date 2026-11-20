@@ -93,9 +93,4 @@ const decodePayload = (token: string): { exp: number } =>
     exp: number;
   };
 
-const invalidRefreshToken = () =>
-  new AppError(
-    401,
-    'INVALID_REFRESH_TOKEN',
-    'Refresh token absent, expiré ou déjà utilisé.',
-  );
+const invalidRefreshToken = () => new AppError('INVALID_REFRESH_TOKEN');

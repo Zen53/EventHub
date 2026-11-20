@@ -54,5 +54,4 @@ export class AccessTokenService {
   }
 }
 
-const invalidToken = () =>
-  new AppError(401, 'UNAUTHORIZED', 'Invalid or expired access token');
+const invalidToken = () => new AppError('UNAUTHORIZED');

@@ -43,12 +43,7 @@ class AppValidationPipe extends StandardSchemaValidationPipe {
   constructor() {
     super({
       exceptionFactory: (issues) =>
-        new AppError(
-          400,
-          'VALIDATION_ERROR',
-          'Validation failed',
-          toValidationDetails(issues),
-        ),
+        new AppError('VALIDATION_ERROR', toValidationDetails(issues)),
     });
   }
 
@@ -66,7 +61,7 @@ class AppValidationPipe extends StandardSchemaValidationPipe {
         field: field ? `${parameter}.${field}` : parameter,
         message,
       }));
-      throw new AppError(error.status, error.code, error.message, details);
+      throw new AppError(error.code, details);
     }
   }
 }

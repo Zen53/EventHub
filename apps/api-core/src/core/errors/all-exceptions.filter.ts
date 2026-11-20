@@ -6,9 +6,38 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import type { ErrorResponse } from '@eventhub/schemas';
+import {
+  errorCatalog,
+  type ErrorCode,
+  type ErrorResponse,
+} from '@eventhub/schemas';
 import type { Response } from 'express';
 import { AppError } from './app-error.js';
+
+const httpExceptionCodes: Partial<Record<number, ErrorCode>> = {
+  [HttpStatus.BAD_REQUEST]: 'BAD_REQUEST',
+  [HttpStatus.UNAUTHORIZED]: 'UNAUTHORIZED',
+  [HttpStatus.FORBIDDEN]: 'FORBIDDEN',
+  [HttpStatus.NOT_FOUND]: 'NOT_FOUND',
+};
+
+function fromCatalog(
+  code: ErrorCode,
+  message: string = errorCatalog[code].message,
+): { status: number; body: ErrorResponse } {
+  return {
+    status: errorCatalog[code].status,
+    body: { error: { code, message, details: null } },
+  };
+}
+
+function fromHttpException(exception: HttpException) {
+  const code = httpExceptionCodes[exception.getStatus()];
+  if (!code) return fromCatalog('BAD_REQUEST');
+  const message =
+    exception.getResponse() instanceof Error ? code : exception.message;
+  return fromCatalog(code, message);
+}
 
 export function toErrorResponse(exception: unknown): {
   status: number;
@@ -22,23 +51,9 @@ export function toErrorResponse(exception: unknown): {
     };
   }
   if (exception instanceof HttpException && exception.getStatus() < 500) {
-    const status = exception.getStatus();
-    const code = (HttpStatus[status] as string | undefined) ?? 'HTTP_ERROR';
-    // An HttpException built from an Error would carry that error's internal message.
-    const message =
-      exception.getResponse() instanceof Error ? code : exception.message;
-    return { status, body: { error: { code, message, details: null } } };
+    return fromHttpException(exception);
   }
-  return {
-    status: HttpStatus.INTERNAL_SERVER_ERROR,
-    body: {
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Internal server error',
-        details: null,
-      },
-    },
-  };
+  return fromCatalog('INTERNAL_ERROR');
 }
 
 @Catch()

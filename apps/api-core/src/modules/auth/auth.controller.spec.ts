@@ -133,11 +133,7 @@ describe('AuthController', () => {
 
   it('propagates 409 EMAIL_ALREADY_USED as is', async () => {
     const { controller, auth } = setup();
-    const error = new AppError(
-      409,
-      'EMAIL_ALREADY_USED',
-      'Cet email est déjà associé à un compte.',
-    );
+    const error = new AppError('EMAIL_ALREADY_USED');
     auth.register.mockRejectedValue(error);
 
     await expect(controller.register(body)).rejects.toBe(error);
@@ -222,11 +218,7 @@ describe('AuthController.login', () => {
   it('propagates 401 INVALID_CREDENTIALS without setting a cookie', async () => {
     const { controller, auth } = setup();
     const response = { cookie: vi.fn() };
-    const error = new AppError(
-      401,
-      'INVALID_CREDENTIALS',
-      'Email ou mot de passe incorrect.',
-    );
+    const error = new AppError('INVALID_CREDENTIALS');
     auth.login.mockRejectedValue(error);
 
     await expect(
@@ -407,11 +399,7 @@ describe('AuthController.refresh', () => {
 
   it('clears the cookie then rethrows 401 INVALID_REFRESH_TOKEN', async () => {
     const { controller, auth } = setup();
-    const error = new AppError(
-      401,
-      'INVALID_REFRESH_TOKEN',
-      'Refresh token absent, expiré ou déjà utilisé.',
-    );
+    const error = new AppError('INVALID_REFRESH_TOKEN');
     auth.refresh.mockRejectedValue(error);
 
     const { calls, response, result } = call(controller, {

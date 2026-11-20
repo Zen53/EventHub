@@ -16,7 +16,7 @@ export class UsersController {
   async getMe(@CurrentUser() { userId }: AuthenticatedUser): Promise<User> {
     const row = await this.users.findById(userId);
     if (!row) {
-      throw new AppError(401, 'UNAUTHORIZED', 'Authentication required');
+      throw new AppError('UNAUTHORIZED');
     }
     return toUserResponse(row);
   }

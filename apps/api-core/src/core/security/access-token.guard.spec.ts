@@ -69,9 +69,7 @@ describe('AccessTokenGuard', () => {
   });
 
   it('answers 401 UNAUTHORIZED with an invalid token', async () => {
-    verify.mockRejectedValue(
-      new AppError(401, 'UNAUTHORIZED', 'Invalid or expired access token'),
-    );
+    verify.mockRejectedValue(new AppError('UNAUTHORIZED'));
     const { context, request } = contextFor(ProtectedController, {
       authorization: 'Bearer a.b.c',
     });

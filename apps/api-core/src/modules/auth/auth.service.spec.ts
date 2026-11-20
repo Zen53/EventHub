@@ -36,12 +36,7 @@ const verified = {
   expiresAt: issued.expiresAt,
 };
 
-const invalidRefreshToken = () =>
-  new AppError(
-    401,
-    'INVALID_REFRESH_TOKEN',
-    'Refresh token absent, expiré ou déjà utilisé.',
-  );
+const invalidRefreshToken = () => new AppError('INVALID_REFRESH_TOKEN');
 
 function setup() {
   const users = {
@@ -73,11 +68,7 @@ describe('AuthService.register', () => {
 
   it('propagates 409 EMAIL_ALREADY_USED as is', async () => {
     const { service, users } = setup();
-    const error = new AppError(
-      409,
-      'EMAIL_ALREADY_USED',
-      'Cet email est déjà associé à un compte.',
-    );
+    const error = new AppError('EMAIL_ALREADY_USED');
     users.create.mockRejectedValue(error);
 
     await expect(service.register(body)).rejects.toBe(error);
@@ -123,7 +114,7 @@ describe('AuthService.login', () => {
     expect(wrongPassword).toMatchObject({
       status: 401,
       code: 'INVALID_CREDENTIALS',
-      message: 'Email ou mot de passe incorrect.',
+      message: 'Invalid email or password',
       details: null,
     });
     expect(unknownEmail).toBeInstanceOf(AppError);
@@ -198,7 +189,7 @@ describe('AuthService.logout', () => {
 
   it('propagates another AppError raised while verifying', async () => {
     const { service, refreshTokens } = setup();
-    const error = new AppError(500, 'INTERNAL_ERROR', 'Erreur interne.');
+    const error = new AppError('INTERNAL_ERROR');
     refreshTokens.verify.mockRejectedValue(error);
 
     await expect(service.logout('signed-refresh-token')).rejects.toBe(error);
@@ -220,7 +211,7 @@ describe('AuthService.refresh', () => {
     expect(error).toMatchObject({
       status: 401,
       code: 'INVALID_REFRESH_TOKEN',
-      message: 'Refresh token absent, expiré ou déjà utilisé.',
+      message: 'Invalid or expired refresh token',
     });
   };
 

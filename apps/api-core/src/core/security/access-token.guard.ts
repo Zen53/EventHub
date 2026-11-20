@@ -29,7 +29,7 @@ export class AccessTokenGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const token = BEARER.exec(request.headers.authorization ?? '')?.[1];
     if (!token) {
-      throw new AppError(401, 'UNAUTHORIZED', 'Authentication required');
+      throw new AppError('UNAUTHORIZED');
     }
     request.user = await this.accessTokens.verify(token);
     return true;

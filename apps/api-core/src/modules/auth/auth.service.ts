@@ -32,11 +32,7 @@ export class AuthService {
   async login({ email, password }: LoginBody): Promise<LoginResult> {
     const user = await this.users.verifyCredentials(email, password);
     if (!user) {
-      throw new AppError(
-        401,
-        'INVALID_CREDENTIALS',
-        'Email ou mot de passe incorrect.',
-      );
+      throw new AppError('INVALID_CREDENTIALS');
     }
     const accessToken = this.accessTokens.sign({ userId: user.id });
     const refreshToken = this.refreshTokens.issue(user.id);
@@ -78,12 +74,7 @@ export class AuthService {
   }
 }
 
-const invalidRefreshToken = () =>
-  new AppError(
-    401,
-    'INVALID_REFRESH_TOKEN',
-    'Refresh token absent, expiré ou déjà utilisé.',
-  );
+const invalidRefreshToken = () => new AppError('INVALID_REFRESH_TOKEN');
 
 export const isInvalidRefreshToken = (error: unknown) =>
   error instanceof AppError && error.code === 'INVALID_REFRESH_TOKEN';
