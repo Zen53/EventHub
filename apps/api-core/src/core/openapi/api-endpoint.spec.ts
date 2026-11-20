@@ -17,7 +17,6 @@ import type {
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { z } from 'zod';
-import { CoreModule } from '../core.module.js';
 import { Public } from '../security/index.js';
 import {
   ApiEndpoint,
@@ -87,6 +86,7 @@ describe('ApiEndpoint', () => {
   beforeAll(async () => {
     vi.stubEnv('DATABASE_URL', 'postgres://user:pass@localhost:5432/db');
     vi.stubEnv('JWT_ACCESS_SECRET', 'test-only-access-secret-of-32-chars!');
+    const { CoreModule } = await import('../core.module.js');
     const moduleRef = await Test.createTestingModule({
       imports: [CoreModule],
       controllers: [ItemsController],
