@@ -1,19 +1,26 @@
 "use client";
 
-import { loginBodySchema } from "@eventhub/schemas";
+import { login, safeNextPath } from "@/lib/auth";
+import { errorResponseSchema, loginBodySchema } from "@eventhub/schemas";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
+const genericError = "Connexion impossible pour le moment.";
+
 export default function LoginForm() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ email?: string; password?: string }>(
     {},
   );
-  const [valid, setValid] = useState(false);
+  const [formError, setFormError] = useState<string>();
+  const [submitting, setSubmitting] = useState(false);
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setFormError(undefined);
     const result = loginBodySchema.safeParse({ email, password });
 
     if (!result.success) {
@@ -25,12 +32,32 @@ export default function LoginForm() {
         }
       }
       setErrors(next);
-      setValid(false);
       return;
     }
 
     setErrors({});
-    setValid(true);
+    setSubmitting(true);
+    try {
+      const outcome = await login(result.data);
+      if (outcome.ok) {
+        const next = new URLSearchParams(window.location.search).get("next");
+        router.replace(safeNextPath(next));
+        return;
+      }
+
+      const payload = errorResponseSchema.safeParse(
+        await outcome.response.json(),
+      );
+      if (payload.success && payload.data.error.code === "INVALID_CREDENTIALS") {
+        setFormError("Email ou mot de passe incorrect.");
+      } else {
+        setFormError(genericError);
+      }
+    } catch {
+      setFormError(genericError);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -59,7 +86,7 @@ export default function LoginForm() {
           onChange={(event) => {
             setEmail(event.target.value);
             setErrors((current) => ({ ...current, email: undefined }));
-            setValid(false);
+            setFormError(undefined);
           }}
           className={`h-12 rounded-xl border bg-white px-4 text-[#1a120e] outline-none transition focus:border-[#e24a1b] ${
             errors.email ? "border-[#c2410c]" : "border-[#e6dfd4]"
@@ -82,7 +109,7 @@ export default function LoginForm() {
           onChange={(event) => {
             setPassword(event.target.value);
             setErrors((current) => ({ ...current, password: undefined }));
-            setValid(false);
+            setFormError(undefined);
           }}
           className={`h-12 rounded-xl border bg-white px-4 text-[#1a120e] outline-none transition focus:border-[#e24a1b] ${
             errors.password ? "border-[#c2410c]" : "border-[#e6dfd4]"
@@ -93,17 +120,21 @@ export default function LoginForm() {
         ) : null}
       </label>
 
-      {valid ? (
-        <p className="rounded-2xl bg-[#e7f6ee] px-4 py-3 text-sm text-[#166534]">
-          Formulaire valide.
+      {formError ? (
+        <p
+          role="alert"
+          className="rounded-2xl bg-[#fdecea] px-4 py-3 text-sm text-[#c2410c]"
+        >
+          {formError}
         </p>
       ) : null}
 
       <button
         type="submit"
-        className="mt-1 h-12 rounded-xl bg-[#e24a1b] text-sm font-semibold text-white transition hover:bg-[#c73d14]"
+        disabled={submitting}
+        className="mt-1 h-12 rounded-xl bg-[#e24a1b] text-sm font-semibold text-white transition hover:bg-[#c73d14] disabled:opacity-60"
       >
-        Se connecter
+        {submitting ? "Connexion…" : "Se connecter"}
       </button>
 
       <p className="text-sm text-[#6d6258] text-center">
