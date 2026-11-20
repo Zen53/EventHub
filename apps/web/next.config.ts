@@ -9,9 +9,6 @@ const nextConfig: NextConfig = {
       { source: "/me", destination: `${apiUrl}/me` },
     ];
   },
-  experimental: {
-    agentFeedback: true,
-  },
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {
