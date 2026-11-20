@@ -24,7 +24,7 @@ const requestBodySchema = (
   return schema;
 };
 
-describe('createOpenApiDocument', () => {
+describe('OpenAPI document of the application', () => {
   let app: INestApplication;
   let document: OpenAPIObject;
 
@@ -37,11 +37,24 @@ describe('createOpenApiDocument', () => {
     }).compile();
     app = moduleRef.createNestApplication();
     document = createOpenApiDocument(app);
+    setupOpenApi(app);
+    await app.init();
   });
 
   afterAll(async () => {
     await app.close();
     vi.unstubAllEnvs();
+  });
+
+  it('serves /docs and /docs-json without an access token', async () => {
+    await request(app.getHttpServer())
+      .get('/docs')
+      .expect(200)
+      .expect('Content-Type', /html/);
+    const { body } = await request(app.getHttpServer())
+      .get('/docs-json')
+      .expect(200);
+    expect(body).toMatchObject({ info: { title: 'EventHub API' } });
   });
 
   it('describes the API', () => {
@@ -104,7 +117,7 @@ describe('setupOpenApi', () => {
     async (nodeEnv) => {
       const app = await createApp(nodeEnv);
 
-      expect(setupOpenApi(app)).toBe(true);
+      setupOpenApi(app);
       await app.init();
 
       await request(app.getHttpServer())
@@ -123,7 +136,7 @@ describe('setupOpenApi', () => {
   it('serves nothing when NODE_ENV=production', async () => {
     const app = await createApp('production');
 
-    expect(setupOpenApi(app)).toBe(false);
+    setupOpenApi(app);
     await app.init();
 
     await request(app.getHttpServer()).get('/docs').expect(404);
