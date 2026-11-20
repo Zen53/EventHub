@@ -21,17 +21,17 @@ pnpm dev:schemas     # en continu pendant le développement
 
 ## Contenu
 
-| Export | Rôle |
-| --- | --- |
-| `registerBodySchema`, `RegisterBody` | Corps de `POST /auth/register` |
-| `loginBodySchema`, `LoginBody` | Corps de `POST /auth/login` |
-| `loginResponseSchema`, `LoginResponse` | Réponse de `POST /auth/login` |
-| `refreshResponseSchema`, `RefreshResponse` | Réponse de `POST /auth/refresh` |
-| `userSchema`, `User` | Utilisateur renvoyé par l'API |
-| `emailSchema`, `passwordSchema`, `nameSchema`, `phoneSchema` | Champs réutilisables |
-| `errorResponseSchema`, `ErrorResponse` | Enveloppe d'erreur de l'API |
-| `fieldErrorSchema`, `FieldError` | Détail d'une erreur de champ |
-| `errorCatalog`, `ErrorCode`, `errorCodes`, `errorCodeSchema` | Codes d'erreur, avec leur statut HTTP et leur message |
+Chaque schéma est exporté avec son type TypeScript, inféré par `z.infer` : `fooSchema` va avec le type `Foo`. Les exports se rangent en quelques familles, reconnaissables à leur nom :
+
+| Famille | Nommage | Rôle |
+| --- | --- | --- |
+| Corps de requête | `<action>BodySchema` | Ce que le client envoie à une route |
+| Réponses | `<action>ResponseSchema` | Ce que l'API renvoie en cas de succès |
+| Ressources | `<ressource>Schema` | Une entité exposée par l'API, par exemple `userSchema` |
+| Champs | `<champ>Schema` | Une règle de champ réutilisable, par exemple `emailSchema` |
+| Erreurs | `errorResponseSchema`, `errorCatalog` | L'enveloppe d'erreur et le catalogue des codes, avec leur statut HTTP |
+
+La liste complète des exports se trouve dans `src/index.ts`.
 
 Les corps de requête sont stricts : un champ inconnu est refusé. Les messages de validation sont en français et peuvent être affichés tels quels à l'utilisateur.
 
