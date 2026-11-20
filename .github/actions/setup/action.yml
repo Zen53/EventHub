@@ -1,5 +1,10 @@
 name: Setup
-description: Install pnpm, Node and the dependencies of packages/schemas and apps/api-core
+description: Install pnpm, Node, packages/schemas and the dependencies of one app
+
+inputs:
+  app:
+    description: App folder under apps/ to install (api-core or web)
+    required: true
 
 runs:
   using: composite
@@ -14,14 +19,14 @@ runs:
         cache: pnpm
         cache-dependency-path: |
           packages/schemas/pnpm-lock.yaml
-          apps/api-core/pnpm-lock.yaml
+          apps/${{ inputs.app }}/pnpm-lock.yaml
 
     - name: Install schemas
       shell: bash
       working-directory: packages/schemas
       run: pnpm install --frozen-lockfile
 
-    - name: Install api-core
+    - name: Install ${{ inputs.app }}
       shell: bash
-      working-directory: apps/api-core
+      working-directory: apps/${{ inputs.app }}
       run: pnpm install --frozen-lockfile

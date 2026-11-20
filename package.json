@@ -16,6 +16,7 @@
     "lint:api": "cd apps/api-core && pnpm lint",
     "typecheck:api": "cd apps/api-core && pnpm typecheck",
     "format:check:api": "cd apps/api-core && pnpm format:check",
-    "lint:web": "cd apps/web && pnpm lint"
+    "lint:web": "cd apps/web && pnpm lint",
+    "typecheck:web": "cd apps/web && pnpm typecheck"
   }
 }
