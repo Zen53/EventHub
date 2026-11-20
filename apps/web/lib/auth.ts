@@ -140,7 +140,7 @@ export function useSession(): SessionStatus {
  * Seuls les chemins internes sont acceptés (pas de `//evil.com` ni d'URL
  * absolue), pour qu'un lien piégé ne renvoie pas l'utilisateur hors du site.
  */
-export function safeNextPath(value: string | null, fallback = "/compte") {
+export function safeNextPath(value: string | null, fallback = "/profil") {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {
     return fallback;
   }
