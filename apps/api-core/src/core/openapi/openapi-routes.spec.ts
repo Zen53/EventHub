@@ -168,6 +168,21 @@ describe('OpenAPI documentation of the auth and /me routes', () => {
     expectErrorResponse(routes[4], '401', 'UNAUTHORIZED');
   });
 
+  it('resolves the security of every operation from its handler', () => {
+    const operations = Object.values(document.paths).flatMap((pathItem) =>
+      (['get', 'post', 'put', 'patch', 'delete'] as const).flatMap(
+        (method) => pathItem[method] ?? [],
+      ),
+    );
+
+    for (const { operationId, security, responses } of operations) {
+      expect({
+        operationId,
+        resolved: security !== undefined || '401' in responses,
+      }).toEqual({ operationId, resolved: true });
+    }
+  });
+
   it('requires the bearer access token by default', () => {
     expect(document.security).toEqual([{ bearer: [] }]);
   });

@@ -69,8 +69,7 @@ export const ApiEndpoint =
       })(target, methodKey, descriptor);
     }
     documentSuccessResponse(target.constructor, methodKey, {
-      description: '',
-      ...(response && { standardSchema: response }),
-      ...(headers && { headers }),
+      standardSchema: response,
+      headers,
     });
   };

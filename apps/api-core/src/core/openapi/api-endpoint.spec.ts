@@ -1,5 +1,6 @@
 import {
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -47,13 +48,22 @@ class ItemsController {
   list(): object[] {
     return [];
   }
+
+  @Public()
+  @ApiEndpoint('Supprimer', { errors: ['NOT_FOUND'] })
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  remove(): void {}
 }
 
 describe('ApiEndpoint', () => {
   let app: INestApplication;
   let document: OpenAPIObject;
 
-  const operation = (path: string, method: 'get' | 'post'): OperationObject => {
+  const operation = (
+    path: string,
+    method: 'get' | 'post' | 'delete',
+  ): OperationObject => {
     const found = document.paths[path]?.[method];
     if (!found) {
       throw new Error(`No operation for ${method} ${path}`);
@@ -63,7 +73,7 @@ describe('ApiEndpoint', () => {
 
   const response = (
     path: string,
-    method: 'get' | 'post',
+    method: 'get' | 'post' | 'delete',
     status: string,
   ): ResponseObject =>
     operation(path, method).responses[status] as ResponseObject;
@@ -100,6 +110,15 @@ describe('ApiEndpoint', () => {
     expect(ok.content?.['application/json']?.schema).toBeDefined();
     expect(operation('/items/search', 'post').responses).not.toHaveProperty(
       '201',
+    );
+  });
+
+  it('documents the success of an endpoint that declares only errors', () => {
+    expect(response('/items/{id}', 'delete', '204').description).toBe(
+      'No Content',
+    );
+    expect(response('/items/{id}', 'delete', '404').description).toContain(
+      'NOT_FOUND',
     );
   });
 
