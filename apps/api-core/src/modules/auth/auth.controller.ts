@@ -10,13 +10,15 @@ import {
 import {
   type LoginBody,
   loginBodySchema,
-  type LoginResponse,
-  type RefreshResponse,
+  loginResponseSchema,
+  refreshResponseSchema,
   type RegisterBody,
   registerBodySchema,
-  type User,
+  userSchema,
 } from '@eventhub/schemas';
+import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
+import { ApiEndpoint } from '../../core/openapi/api-endpoint.js';
 import { Public } from '../../core/security/index.js';
 import { toUserResponse } from '../users/index.js';
 import { AuthService, isInvalidRefreshToken } from './auth.service.js';
@@ -26,38 +28,73 @@ import {
   setRefreshTokenCookie,
 } from './refresh-token.cookie.js';
 
+const setRefreshTokenCookieHeader = {
+  'Set-Cookie': {
+    description:
+      'Nouveau refresh token dans le cookie `refreshToken` (`HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/auth`, 7 jours).',
+    schema: { type: 'string' as const },
+  },
+};
+
+const clearRefreshTokenCookieHeader = {
+  'Set-Cookie': {
+    description:
+      'Suppression du cookie `refreshToken` (`Path=/auth`, date d’expiration passée).',
+    schema: { type: 'string' as const },
+  },
+};
+
+@ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   @Public()
+  @ApiEndpoint('Créer un compte', {
+    description: 'L’utilisateur n’est pas connecté : aucun token n’est émis.',
+    response: userSchema,
+    errors: ['EMAIL_ALREADY_USED'],
+  })
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
-  async register(
-    @Body({ schema: registerBodySchema }) body: RegisterBody,
-  ): Promise<User> {
+  async register(@Body({ schema: registerBodySchema }) body: RegisterBody) {
     return toUserResponse(await this.auth.register(body));
   }
 
   @Public()
+  @ApiEndpoint('Se connecter', {
+    description:
+      'Renvoie l’access token et le `User`, et pose le refresh token en cookie. Le message d’erreur est le même que l’email soit inconnu ou que le mot de passe soit faux.',
+    response: loginResponseSchema,
+    headers: setRefreshTokenCookieHeader,
+    errors: ['INVALID_CREDENTIALS'],
+  })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
     @Body({ schema: loginBodySchema }) body: LoginBody,
     @Res({ passthrough: true }) response: Response,
-  ): Promise<LoginResponse> {
+  ) {
     const { accessToken, refreshToken, user } = await this.auth.login(body);
     setRefreshTokenCookie(response, refreshToken.token);
     return { accessToken, user: toUserResponse(user) };
   }
 
   @Public()
+  @ApiCookieAuth()
+  @ApiEndpoint('Renouveler l’access token', {
+    description:
+      'Émet un nouveau refresh token (rotation) et invalide l’ancien. Le cookie est supprimé quand le refresh token est refusé.',
+    response: refreshResponseSchema,
+    headers: setRefreshTokenCookieHeader,
+    errors: ['INVALID_REFRESH_TOKEN'],
+  })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
-  ): Promise<RefreshResponse> {
+  ) {
     try {
       const { accessToken, refreshToken } = await this.auth.refresh(
         refreshTokenOf(request),
@@ -73,6 +110,12 @@ export class AuthController {
   }
 
   @Public()
+  @ApiCookieAuth()
+  @ApiEndpoint('Se déconnecter', {
+    description:
+      'Invalide le refresh token et supprime le cookie. Répond 204 même si le token était déjà invalide.',
+    headers: clearRefreshTokenCookieHeader,
+  })
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
   async logout(
