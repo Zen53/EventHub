@@ -1,6 +1,7 @@
 "use client";
 
 import { errorResponseSchema, registerBodySchema } from "@eventhub/schemas";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
@@ -203,6 +204,12 @@ export default function RegisterForm() {
       >
         {submitting ? "Création du compte…" : "Créer mon compte"}
       </button>
+      <p className="text-sm text-[#6d6258] text-center">
+        Déjà un compte ?{" "}
+        <Link href="/connexion" className="font-medium text-[#e24a1b]">
+          Se connecter
+        </Link>
+      </p>
     </form>
   );
 }
