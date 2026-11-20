@@ -125,6 +125,21 @@ describe('AllExceptionsFilter', () => {
     });
   });
 
+  it('hides a thrown non-Error value behind a 500 INTERNAL_ERROR', () => {
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    expect(catchWith('boom')).toEqual({
+      status: 500,
+      body: {
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Internal server error',
+          details: null,
+        },
+      },
+    });
+  });
+
   it('returns a fresh body for each 500', () => {
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 
