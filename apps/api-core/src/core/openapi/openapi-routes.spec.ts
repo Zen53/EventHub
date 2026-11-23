@@ -242,6 +242,42 @@ describe('OpenAPI documentation of the auth and /me routes', () => {
     expectErrorResponse(route, '400', 'VALIDATION_ERROR');
   });
 
+  it('documents GET /events/{id} as public, with the Event and its errors', () => {
+    const route: Route = ['get', '/events/{id}'];
+    const { tags, security, summary, parameters } = operation(route);
+
+    expect(tags).toEqual(['Events']);
+    expect(security).toEqual([]);
+    expect(summary).toBe('Consulter un événement');
+    expect(Object.keys(operation(route).responses).sort()).toEqual([
+      '200',
+      '400',
+      '404',
+    ]);
+    expect(
+      (parameters ?? []).map((parameter) =>
+        'name' in parameter ? [parameter.name, parameter.in] : [],
+      ),
+    ).toEqual([['id', 'path']]);
+    const event = propertiesOf(jsonSchema(route, '200'));
+    expect(event).toEqual(
+      expect.arrayContaining([
+        'description',
+        'endsAt',
+        'location',
+        'organizer',
+      ]),
+    );
+    expect(event).not.toContain('ticketCategories');
+    expect(
+      propertiesOf(
+        jsonSchema(route, '200').properties?.organizer as SchemaObject,
+      ),
+    ).toEqual(['id', 'firstName', 'lastName']);
+    expectErrorResponse(route, '400', 'VALIDATION_ERROR');
+    expectErrorResponse(route, '404', 'EVENT_NOT_FOUND');
+  });
+
   it('declares the shared ErrorResponse component once', () => {
     expect(document.components?.schemas).toHaveProperty('ErrorResponse');
   });

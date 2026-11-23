@@ -24,9 +24,9 @@
 | `imageUrl`    | string (URL)      | non         | URL http(s) valide                            | client     |
 | `type`        | string (enum)     | oui         | `concert`, `theatre`, `sport`, `conference`, `festival`, `other` | client |
 | `status`      | string (enum)     | oui         | `published` ou `cancelled`. Vaut `published` à la création. | back |
-| `ticketCategories` | `TicketCategory[]` | oui    | Au moins 1 catégorie, 10 au maximum, noms uniques dans l'événement | client |
-| `totalCapacity` | entier          | oui         | Somme des `capacity` des catégories          | back       |
-| `maxTicketsPerReservation` | entier | oui      | 1 à 10. Défaut : `4`                          | client     |
+| `ticketCategories` | `TicketCategory[]` | oui (sprint 3) | Au moins 1 catégorie, 10 au maximum, noms uniques dans l'événement | client |
+| `totalCapacity` | entier          | oui (sprint 3) | Somme des `capacity` des catégories       | back       |
+| `maxTicketsPerReservation` | entier | oui (sprint 3) | 1 à 10. Défaut : `4`                      | client     |
 | `organizer`   | `Organizer`       | oui         | L'utilisateur connecté au moment de la création | back     |
 | `createdAt`   | string (ISO 8601) | oui         |                                               | back       |
 | `updatedAt`   | string (ISO 8601) | oui         |                                               | back       |
@@ -138,22 +138,6 @@ Utilisée par le catalogue et « Mes événements », qui n'ont besoin que de l'
   "imageUrl": "https://exemple.fr/jazz.jpg",
   "type": "concert",
   "status": "published",
-  "ticketCategories": [
-    {
-      "id": "c1d2e3f4-1111-4000-8000-000000000001",
-      "name": "Fosse",
-      "priceCents": 2500,
-      "capacity": 300
-    },
-    {
-      "id": "c1d2e3f4-1111-4000-8000-000000000002",
-      "name": "Balcon",
-      "priceCents": 4000,
-      "capacity": 120
-    }
-  ],
-  "totalCapacity": 420,
-  "maxTicketsPerReservation": 4,
   "organizer": {
     "id": "a1b2c3d4-0000-4000-8000-000000000001",
     "firstName": "Dalyll",
@@ -164,7 +148,9 @@ Utilisée par le catalogue et « Mes événements », qui n'ont besoin que de l'
 }
 ```
 
-- **Erreurs** : `404 EVENT_NOT_FOUND`
+- **Erreurs** : `400 VALIDATION_ERROR` (l'`id` n'est pas un UUID), `404 EVENT_NOT_FOUND`
+- Les événements passés et annulés sont renvoyés, avec leur `status`.
+- Les champs de billetterie (`ticketCategories`, `totalCapacity`, `maxTicketsPerReservation`) arrivent au sprint 3 et ne sont pas encore renvoyés.
 
 ### `POST /events` : créer un événement
 
