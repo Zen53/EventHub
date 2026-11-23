@@ -32,6 +32,45 @@ export const eventSummarySchema = z.object({
 
 export type EventSummary = z.infer<typeof eventSummarySchema>;
 
+export const locationSchema = z.object({
+  name: z.string(),
+  address: z.string(),
+  city: z.string(),
+});
+
+export type Location = z.infer<typeof locationSchema>;
+
+export const organizerSchema = z.object({
+  id: z.uuid(),
+  firstName: z.string(),
+  lastName: z.string(),
+});
+
+export type Organizer = z.infer<typeof organizerSchema>;
+
+export const eventSchema = z.object({
+  id: z.uuid(),
+  title: z.string(),
+  description: z.string(),
+  startsAt: z.iso.datetime(),
+  endsAt: z.iso.datetime().nullable(),
+  location: locationSchema,
+  imageUrl: z.string().nullable(),
+  type: eventTypeSchema,
+  status: eventStatusSchema,
+  organizer: organizerSchema,
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+
+export type Event = z.infer<typeof eventSchema>;
+
+export const eventIdParamsSchema = z.strictObject({
+  id: z.uuid({ error: "L'identifiant de l'événement doit être un UUID." }),
+});
+
+export type EventIdParams = z.infer<typeof eventIdParamsSchema>;
+
 export const EVENTS_MAX_LIMIT = 50;
 
 export const listEventsQuerySchema = z.strictObject({
