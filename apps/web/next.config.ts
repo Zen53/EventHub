@@ -8,6 +8,8 @@ const nextConfig: NextConfig = {
     return [
       { source: "/auth/:path*", destination: `${apiUrl}/auth/:path*` },
       { source: "/me", destination: `${apiUrl}/me` },
+      { source: "/events", destination: `${apiUrl}/events` },
+      { source: "/events/:path*", destination: `${apiUrl}/events/:path*` },
     ];
   },
   cacheComponents: true,
