@@ -9,13 +9,13 @@
   "scripts": {
     "build": "nest build",
     "deploy": "nest deploy",
-    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
-    "format:check": "prettier --check \"src/**/*.ts\" drizzle.config.ts",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"scripts/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"scripts/**/*.ts\" drizzle.config.ts",
     "start": "nest start --env-file .env",
     "start:dev": "nest start --watch --env-file .env",
     "start:debug": "nest start --debug --watch --env-file .env",
     "start:prod": "node dist/main",
-    "lint": "oxlint --type-aware src/ drizzle.config.ts",
+    "lint": "oxlint --type-aware src/ scripts/ drizzle.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -23,7 +23,8 @@
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "db:seed": "tsx scripts/seed/seed.ts"
   },
   "dependencies": {
     "@eventhub/schemas": "link:../../packages/schemas",
@@ -58,6 +59,7 @@
     "prettier": "^3.4.2",
     "source-map-support": "^0.5.21",
     "supertest": "^7.0.0",
+    "tsx": "^4.23.15",
     "typescript": "^6.0.2",
     "vite": "^8.0.0",
     "vitest": "^4.1.2"
