@@ -11,6 +11,7 @@ export const errorCatalog = {
   },
   FORBIDDEN: { status: 403, message: 'Forbidden' },
   NOT_FOUND: { status: 404, message: 'Not found' },
+  EVENT_NOT_FOUND: { status: 404, message: 'Event not found' },
   EMAIL_ALREADY_USED: { status: 409, message: 'Email already used' },
   INTERNAL_ERROR: { status: 500, message: 'Internal server error' },
 } as const satisfies Record<string, { status: number; message: string }>;

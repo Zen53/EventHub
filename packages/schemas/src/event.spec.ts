@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  eventIdParamsSchema,
+  eventSchema,
   eventSummarySchema,
   eventsListResponseSchema,
   listEventsQuerySchema,
@@ -16,7 +18,73 @@ const summary = {
   minPriceCents: 2500,
 };
 
+const event = {
+  id: '3f2a9c1e-7b4d-4e8a-9f10-2c5d6e7f8a90',
+  title: 'Concert de jazz',
+  description: 'Une soirée jazz avec le quartet de Lyon.',
+  startsAt: '2026-12-05T19:30:00Z',
+  endsAt: '2026-12-05T22:00:00Z',
+  location: {
+    name: 'Salle Molière',
+    address: '18 quai de Bondy',
+    city: 'Lyon',
+  },
+  imageUrl: 'https://exemple.fr/jazz.jpg',
+  type: 'concert',
+  status: 'published',
+  organizer: {
+    id: 'a1b2c3d4-0000-4000-8000-000000000001',
+    firstName: 'Dalyll',
+    lastName: 'Martin',
+  },
+  createdAt: '2026-11-13T10:00:00Z',
+  updatedAt: '2026-11-13T10:00:00Z',
+};
+
 describe('event schemas', () => {
+  describe('eventSchema', () => {
+    it('accepts the contract Event', () => {
+      expect(eventSchema.safeParse(event).success).toBe(true);
+    });
+
+    it('accepts a null endsAt and a null imageUrl', () => {
+      expect(
+        eventSchema.safeParse({ ...event, endsAt: null, imageUrl: null })
+          .success,
+      ).toBe(true);
+    });
+
+    it.each([
+      { endsAt: undefined },
+      { location: { name: 'Salle Molière', city: 'Lyon' } },
+      { organizer: { id: 'not-a-uuid', firstName: 'D', lastName: 'M' } },
+      { status: 'draft' },
+    ])('rejects %j', (patch) => {
+      expect(eventSchema.safeParse({ ...event, ...patch }).success).toBe(
+        false,
+      );
+    });
+  });
+
+  describe('eventIdParamsSchema', () => {
+    it('accepts a UUID', () => {
+      expect(eventIdParamsSchema.parse({ id: event.id })).toEqual({
+        id: event.id,
+      });
+    });
+
+    it('rejects an id that is not a UUID', () => {
+      const result = eventIdParamsSchema.safeParse({ id: 'abc' });
+      expect(result.success).toBe(false);
+      expect(result.error?.issues).toContainEqual(
+        expect.objectContaining({
+          path: ['id'],
+          message: "L'identifiant de l'événement doit être un UUID.",
+        }),
+      );
+    });
+  });
+
   describe('eventSummarySchema', () => {
     it('accepts the contract EventSummary', () => {
       expect(eventSummarySchema.safeParse(summary).success).toBe(true);
