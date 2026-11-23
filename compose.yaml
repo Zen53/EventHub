@@ -1,0 +1,72 @@
+# Lance tout le projet
+#   Front : http://localhost:3000
+#   API   : http://localhost:3001 (doc OpenAPI : /docs)
+name: eventhub
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: eventhub
+      POSTGRES_PASSWORD: eventhub
+      POSTGRES_DB: eventhub
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    # Port non publié.
+    # Pour s'y connecter depuis la machine, décommenter :
+    # ports:
+    #   - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eventhub -d eventhub"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # Applique les migrations Drizzle puis s'arrête ; l'API attend qu'il ait réussi.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api-core/Dockerfile
+      target: migrate
+    environment:
+      DATABASE_URL: postgres://eventhub:eventhub@db:5432/eventhub
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api-core/Dockerfile
+      target: runtime
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      DATABASE_URL: postgres://eventhub:eventhub@db:5432/eventhub
+      # Secret de développement local uniquement. Pour en utiliser un autre :
+      # JWT_ACCESS_SECRET=$(openssl rand -base64 48) docker compose up
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-local-docker-dev-secret-do-not-use-in-production}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "3001:3001"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        API_URL: http://api:3001
+    environment:
+      API_URL: http://api:3001
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+volumes:
+  db-data:

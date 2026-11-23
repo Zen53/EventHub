@@ -1,0 +1,11 @@
+# Le contexte de build est la racine du dépôt : on n'envoie que les sources.
+.git
+**/node_modules
+**/dist
+**/.next
+**/coverage
+**/*.tsbuildinfo
+**/.env
+**/.env.*
+!**/.env.example
+**/.DS_Store
