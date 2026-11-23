@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { envSchema } from '../../src/core/config/env.schema.js';
@@ -37,14 +37,17 @@ async function seed(): Promise<void> {
       .from(users)
       .where(eq(users.email, demoOrganizer.email));
 
-    const inserted = await tx
+    const seeded = await tx
       .insert(events)
       .values(buildDemoEvents(new Date(), organizer.id))
-      .onConflictDoNothing({ target: events.id })
+      .onConflictDoUpdate({
+        target: events.id,
+        set: { startsAt: sql`excluded.starts_at` },
+      })
       .returning({ id: events.id });
 
     console.log(
-      `Seed: organizer ${demoOrganizer.email}, ${inserted.length} new event(s).`,
+      `Seed: organizer ${demoOrganizer.email}, ${seeded.length} event(s) dated from now.`,
     );
   });
 }
