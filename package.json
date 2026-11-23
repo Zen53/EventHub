@@ -1,0 +1,22 @@
+{
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "install:all": "cd packages/schemas && pnpm install && cd ../../apps/api-core && pnpm install && cd ../web && pnpm install",
+    "build:schemas": "cd packages/schemas && pnpm build",
+    "dev:schemas": "cd packages/schemas && pnpm dev",
+    "start:api": "cd apps/api-core && pnpm start:dev",
+    "start:web": "cd apps/web && pnpm dev",
+    "test": "pnpm test:schemas && pnpm test:api",
+    "test:api": "cd apps/api-core && pnpm test",
+    "test:schemas": "cd packages/schemas && pnpm test",
+    "lint:api": "cd apps/api-core && pnpm lint",
+    "typecheck:api": "cd apps/api-core && pnpm typecheck",
+    "format:check:api": "cd apps/api-core && pnpm format:check",
+    "lint:web": "cd apps/web && pnpm lint",
+    "typecheck:web": "cd apps/web && pnpm typecheck"
+  }
+}

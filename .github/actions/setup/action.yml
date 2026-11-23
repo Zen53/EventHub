@@ -1,0 +1,32 @@
+name: Setup
+description: Install pnpm, Node, packages/schemas and the dependencies of one app
+
+inputs:
+  app:
+    description: App folder under apps/ to install (api-core or web)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      with:
+        version: 12.11.2
+
+    - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      with:
+        node-version: 24
+        cache: pnpm
+        cache-dependency-path: |
+          packages/schemas/pnpm-lock.yaml
+          apps/${{ inputs.app }}/pnpm-lock.yaml
+
+    - name: Install schemas
+      shell: bash
+      working-directory: packages/schemas
+      run: pnpm install --frozen-lockfile
+
+    - name: Install ${{ inputs.app }}
+      shell: bash
+      working-directory: apps/${{ inputs.app }}
+      run: pnpm install --frozen-lockfile
