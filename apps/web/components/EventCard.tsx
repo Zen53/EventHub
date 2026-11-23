@@ -1,4 +1,7 @@
+import Link from "next/link";
+
 type EventCardEvent = {
+  id: string;
   title: string;
   startsAt: string;
   city: string;
@@ -59,7 +62,10 @@ export default function EventCard({ event }: { event: EventCardEvent }) {
   });
 
   return (
-    <article className="flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl bg-white text-[#1a120e] shadow-[0_14px_36px_rgba(26,18,14,0.08)]">
+    <Link
+      href={`/evenements/${event.id}`}
+      className="flex h-full flex-col overflow-hidden rounded-2xl bg-white text-[#1a120e] shadow-[0_14px_36px_rgba(26,18,14,0.08)] transition hover:shadow-[0_18px_40px_rgba(26,18,14,0.12)]"
+    >
       <div className="relative">
         {event.imageUrl ? (
           <img
@@ -97,15 +103,14 @@ export default function EventCard({ event }: { event: EventCardEvent }) {
             <span className="text-[#e6dfd4]">·</span>
             <span className="font-medium text-[#1a120e]">{time}</span>
           </p>
-          <button
-            type="button"
-            aria-label={`Voir ${event.title}`}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#e24a1b] text-white transition hover:bg-[#c73d14] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e24a1b]"
+          <span
+            aria-hidden="true"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#e24a1b] text-white"
           >
             <ArrowIcon />
-          </button>
+          </span>
         </div>
       </div>
-    </article>
+    </Link>
   );
 }
