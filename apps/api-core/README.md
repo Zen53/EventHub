@@ -50,6 +50,12 @@ $ pnpm run start:dev
 $ pnpm run start:prod
 ```
 
+## Demo data
+
+`pnpm db:seed` inserts a demo organizer and about ten events (upcoming dates computed from now, one past, one cancelled), after `pnpm db:migrate`. It reads `DATABASE_URL` from `.env` and can run again without creating duplicates. `docker compose up` runs it automatically after the migrations (`seed` service).
+
+Demo organizer, for local development only: `demo@eventhub.local` / `demo-password`.
+
 ## Run tests
 
 ```bash
