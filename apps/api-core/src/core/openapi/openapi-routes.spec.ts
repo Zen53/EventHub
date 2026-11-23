@@ -220,6 +220,28 @@ describe('OpenAPI documentation of the auth and /me routes', () => {
     expect(JSON.stringify(document)).not.toContain('x-error-codes');
   });
 
+  it('documents GET /events as public, paginated and validated', () => {
+    const route: Route = ['get', '/events'];
+    const { tags, security, parameters } = operation(route);
+
+    expect(tags).toEqual(['Events']);
+    expect(security).toEqual([]);
+    expect(Object.keys(operation(route).responses).sort()).toEqual([
+      '200',
+      '400',
+    ]);
+    expect(propertiesOf(jsonSchema(route, '200'))).toEqual(['data', 'meta']);
+    expect(
+      (parameters ?? []).map((parameter) =>
+        'name' in parameter ? [parameter.name, parameter.in] : [],
+      ),
+    ).toEqual([
+      ['page', 'query'],
+      ['limit', 'query'],
+    ]);
+    expectErrorResponse(route, '400', 'VALIDATION_ERROR');
+  });
+
   it('declares the shared ErrorResponse component once', () => {
     expect(document.components?.schemas).toHaveProperty('ErrorResponse');
   });

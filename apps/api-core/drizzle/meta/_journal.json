@@ -15,6 +15,13 @@
       "when": 1794620505666,
       "tag": "0001_milky_menace",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795436156917,
+      "tag": "0002_daily_madame_web",
+      "breakpoints": true
     }
   ]
 }
