@@ -35,6 +35,20 @@ services:
         condition: service_healthy
     restart: "no"
 
+  # Insère l'organisateur et les événements de démo (idempotent) puis s'arrête.
+  seed:
+    build:
+      context: .
+      dockerfile: apps/api-core/Dockerfile
+      target: migrate
+    command: ["pnpm", "db:seed"]
+    environment:
+      DATABASE_URL: postgres://eventhub:eventhub@db:5432/eventhub
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
   api:
     build:
       context: .
@@ -48,7 +62,7 @@ services:
       # JWT_ACCESS_SECRET=$(openssl rand -base64 48) docker compose up
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-local-docker-dev-secret-do-not-use-in-production}
     depends_on:
-      migrate:
+      seed:
         condition: service_completed_successfully
     ports:
       - "3001:3001"
