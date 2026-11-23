@@ -1,45 +1,15 @@
 "use client";
 
 import EventCard from "@/components/EventCard";
+import { isEventsListResponse, type EventSummary } from "@/lib/events";
 import { useEffect, useState } from "react";
-
-export type CatalogueEvent = {
-  id: string;
-  title: string;
-  startsAt: string;
-  city: string;
-  imageUrl: string | null;
-};
-
-type EventsResponse = {
-  data: CatalogueEvent[];
-  meta: {
-    page: number;
-    limit: number;
-    total: number;
-  };
-};
 
 /** 4 cartes par ligne × 2 lignes. */
 const PAGE_SIZE = 8;
 
-function isEventsResponse(value: unknown): value is EventsResponse {
-  if (!value || typeof value !== "object") return false;
-  const body = value as Record<string, unknown>;
-  if (!Array.isArray(body.data) || !body.meta || typeof body.meta !== "object") {
-    return false;
-  }
-  const meta = body.meta as Record<string, unknown>;
-  return (
-    typeof meta.page === "number" &&
-    typeof meta.limit === "number" &&
-    typeof meta.total === "number"
-  );
-}
-
 export default function CatalogueGrid() {
   const [page, setPage] = useState(1);
-  const [events, setEvents] = useState<CatalogueEvent[]>([]);
+  const [events, setEvents] = useState<EventSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
@@ -65,7 +35,7 @@ export default function CatalogueGrid() {
         }
 
         const json: unknown = await response.json();
-        if (!isEventsResponse(json)) {
+        if (!isEventsListResponse(json)) {
           setEvents([]);
           setTotal(0);
           setError("Impossible de charger le catalogue.");
@@ -102,9 +72,7 @@ export default function CatalogueGrid() {
 
   if (loading) {
     return (
-      <p className="mt-10 text-sm text-[#6d6258]">
-        Chargement des soirées…
-      </p>
+      <p className="mt-10 text-sm text-[#6d6258]">Chargement des soirées…</p>
     );
   }
 
