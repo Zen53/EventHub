@@ -26,6 +26,7 @@ Chaque schéma est exporté avec son type TypeScript, inféré par `z.infer` : `
 | Famille | Nommage | Rôle |
 | --- | --- | --- |
 | Corps de requête | `<action>BodySchema` | Ce que le client envoie à une route |
+| Paramètres | `<action>QuerySchema`, `<ressource>IdParamsSchema` | La query ou les paramètres de chemin d'une route |
 | Réponses | `<action>ResponseSchema` | Ce que l'API renvoie en cas de succès |
 | Ressources | `<ressource>Schema` | Une entité exposée par l'API, par exemple `userSchema` |
 | Champs | `<champ>Schema` | Une règle de champ réutilisable, par exemple `emailSchema` |
