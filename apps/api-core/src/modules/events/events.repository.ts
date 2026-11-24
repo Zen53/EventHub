@@ -6,6 +6,7 @@ import {
   type EventDetailRow,
   type EventSummaryRow,
   events,
+  type NewEventRow,
 } from './events.schema.js';
 
 export interface EventsPage {
@@ -23,6 +24,12 @@ const summaryColumns = {
   status: events.status,
 };
 
+const organizerColumns = {
+  id: users.id,
+  firstName: users.firstName,
+  lastName: users.lastName,
+};
+
 const detailColumns = {
   id: events.id,
   title: events.title,
@@ -37,11 +44,7 @@ const detailColumns = {
   status: events.status,
   createdAt: events.createdAt,
   updatedAt: events.updatedAt,
-  organizer: {
-    id: users.id,
-    firstName: users.firstName,
-    lastName: users.lastName,
-  },
+  organizer: organizerColumns,
 };
 
 @Injectable()
@@ -71,5 +74,13 @@ export class EventsRepository {
       .where(eq(events.id, id))
       .limit(1);
     return row ?? null;
+  }
+
+  async insert(values: NewEventRow): Promise<EventDetailRow | null> {
+    const [inserted] = await this.db
+      .insert(events)
+      .values(values)
+      .returning({ id: events.id });
+    return inserted ? this.findById(inserted.id) : null;
   }
 }

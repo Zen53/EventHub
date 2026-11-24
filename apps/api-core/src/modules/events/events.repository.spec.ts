@@ -7,12 +7,26 @@ import {
   type EventDetailRow,
   type EventSummaryRow,
   events,
+  type NewEventRow,
 } from './events.schema.js';
 
 const dialect = new PgDialect();
 const render = (condition: SQL) => dialect.sqlToQuery(condition).sql;
 
 const row = { id: '3f2a9c1e-7b4d-4e8a-9f10-2c5d6e7f8a90' } as EventSummaryRow;
+const values: NewEventRow = {
+  title: 'Concert de jazz',
+  description: 'Une soirée jazz avec le quartet de Lyon.',
+  startsAt: new Date('2026-12-05T19:30:00Z'),
+  endsAt: null,
+  locationName: 'Salle Molière',
+  locationAddress: '18 quai de Bondy',
+  city: 'Lyon',
+  imageUrl: null,
+  type: 'concert',
+  status: 'published',
+  organizerId: 'a1b2c3d4-0000-4000-8000-000000000001',
+};
 const detail = { id: row.id } as EventDetailRow;
 
 function setup() {
@@ -29,12 +43,18 @@ function setup() {
   selectQuery.where.mockReturnValue(selectQuery);
   selectQuery.orderBy.mockReturnValue(selectQuery);
   selectQuery.limit.mockReturnValue(selectQuery);
+  const insertQuery = {
+    values: vi.fn(),
+    returning: vi.fn().mockResolvedValue([{ id: row.id }]),
+  };
+  insertQuery.values.mockReturnValue(insertQuery);
   const db = {
     select: vi.fn((_columns?: Record<string, unknown>) => selectQuery),
+    insert: vi.fn(() => insertQuery),
     $count: vi.fn().mockResolvedValue(7),
   };
   const repository = new EventsRepository(db as unknown as Database);
-  return { repository, db, selectQuery };
+  return { repository, db, selectQuery, insertQuery };
 }
 
 describe('EventsRepository.findUpcoming', () => {
@@ -131,5 +151,54 @@ describe('EventsRepository.findById', () => {
       lastName: users.lastName,
     });
     expect(columns).not.toHaveProperty('organizerId');
+  });
+});
+
+describe('EventsRepository.insert', () => {
+  function setupInsert(rows: unknown[]) {
+    const context = setup();
+    context.selectQuery.limit.mockResolvedValue(rows);
+    return context;
+  }
+
+  it('inserts the values and returns only the new id', async () => {
+    const { repository, db, insertQuery } = setupInsert([detail]);
+
+    await repository.insert(values);
+
+    expect(db.insert).toHaveBeenCalledWith(events);
+    expect(insertQuery.values).toHaveBeenCalledWith(values);
+    expect(insertQuery.returning).toHaveBeenCalledWith({ id: events.id });
+  });
+
+  it('returns the new event read back with its organizer', async () => {
+    const { repository, selectQuery } = setupInsert([detail]);
+
+    await expect(repository.insert(values)).resolves.toBe(detail);
+    const [table] = selectQuery.innerJoin.mock.calls[0] as [unknown];
+    expect(table).toBe(users);
+    const where = selectQuery.where.mock.calls[0]?.[0] as SQL;
+    expect(dialect.sqlToQuery(where).params).toEqual([row.id]);
+  });
+
+  it('reads the organizer without email, phone nor password', async () => {
+    const { repository, db } = setupInsert([detail]);
+
+    await repository.insert(values);
+
+    const columns = db.select.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(columns.organizer).toEqual({
+      id: users.id,
+      firstName: users.firstName,
+      lastName: users.lastName,
+    });
+  });
+
+  it('returns null when the insert returns no row', async () => {
+    const { repository, db, insertQuery } = setupInsert([detail]);
+    insertQuery.returning.mockResolvedValue([]);
+
+    await expect(repository.insert(values)).resolves.toBeNull();
+    expect(db.select).not.toHaveBeenCalled();
   });
 });

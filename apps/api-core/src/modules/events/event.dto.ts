@@ -1,5 +1,9 @@
-import type { Event, EventSummary } from '@eventhub/schemas';
-import type { EventDetailRow, EventSummaryRow } from './events.schema.js';
+import type { Event, EventSummary, Organizer } from '@eventhub/schemas';
+import type {
+  EventDetailRow,
+  EventSummaryRow,
+  OrganizerRow,
+} from './events.schema.js';
 
 export function toEventSummary(row: EventSummaryRow): EventSummary {
   return {
@@ -11,6 +15,14 @@ export function toEventSummary(row: EventSummaryRow): EventSummary {
     type: row.type,
     status: row.status,
     minPriceCents: 0,
+  };
+}
+
+export function toOrganizer(row: OrganizerRow): Organizer {
+  return {
+    id: row.id,
+    firstName: row.firstName,
+    lastName: row.lastName,
   };
 }
 
@@ -29,11 +41,7 @@ export function toEvent(row: EventDetailRow): Event {
     imageUrl: row.imageUrl,
     type: row.type,
     status: row.status,
-    organizer: {
-      id: row.organizer.id,
-      firstName: row.organizer.firstName,
-      lastName: row.organizer.lastName,
-    },
+    organizer: toOrganizer(row.organizer),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

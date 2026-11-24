@@ -1,4 +1,8 @@
-import type { ListEventsQuery, PaginationMeta } from '@eventhub/schemas';
+import type {
+  CreateEventBody,
+  ListEventsQuery,
+  PaginationMeta,
+} from '@eventhub/schemas';
 import { Injectable } from '@nestjs/common';
 import { AppError } from '../../core/errors/app-error.js';
 import { EventsRepository } from './events.repository.js';
@@ -28,6 +32,29 @@ export class EventsService {
     const row = await this.repository.findById(id);
     if (!row) {
       throw new AppError('EVENT_NOT_FOUND');
+    }
+    return row;
+  }
+
+  async create(
+    organizerId: string,
+    body: CreateEventBody,
+  ): Promise<EventDetailRow> {
+    const row = await this.repository.insert({
+      title: body.title,
+      description: body.description,
+      startsAt: new Date(body.startsAt),
+      endsAt: body.endsAt ? new Date(body.endsAt) : null,
+      locationName: body.location.name,
+      locationAddress: body.location.address,
+      city: body.location.city,
+      imageUrl: body.imageUrl ?? null,
+      type: body.type,
+      status: 'published',
+      organizerId,
+    });
+    if (!row) {
+      throw new AppError('INTERNAL_ERROR');
     }
     return row;
   }
