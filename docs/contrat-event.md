@@ -169,15 +169,12 @@ Utilisée par le catalogue et « Mes événements », qui n'ont besoin que de l'
     "city": "Lyon"
   },
   "imageUrl": "https://exemple.fr/jazz.jpg",
-  "type": "concert",
-  "ticketCategories": [
-    { "name": "Fosse", "priceCents": 2500, "capacity": 300 },
-    { "name": "Balcon", "priceCents": 4000, "capacity": 120 }
-  ],
-  "maxTicketsPerReservation": 4
+  "type": "concert"
 }
 ```
 
+- `endsAt` et `imageUrl` peuvent être omis ou valoir `null`. Un champ inconnu est refusé, y compris `status` et `organizer`.
+- Les champs de billetterie (`ticketCategories`, `maxTicketsPerReservation`) arrivent au sprint 3 : d'ici là, ils sont refusés comme champs inconnus.
 - **Réponse `201`** : l'`Event` complet, au même format que `GET /events/{id}`
 - **Erreurs** : `400 VALIDATION_ERROR`, `401 UNAUTHORIZED`
 
