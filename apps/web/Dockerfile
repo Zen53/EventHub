@@ -18,7 +18,7 @@ COPY apps/web apps/web
 # de next.config.ts (/auth/*, /me). Passée au build et à l'exécution.
 ARG API_URL=http://api:3001
 ENV API_URL=${API_URL}
-RUN pnpm --filter @eventhub/web... build
+RUN pnpm --filter @eventhub/web build
 
 FROM build AS runtime
 ENV NODE_ENV=production

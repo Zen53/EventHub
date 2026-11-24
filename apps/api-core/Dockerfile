@@ -13,7 +13,7 @@ COPY packages/schemas/src packages/schemas/src
 COPY apps/api-core/package.json apps/api-core/
 RUN pnpm install --frozen-lockfile --filter @eventhub/api-core...
 COPY apps/api-core apps/api-core
-RUN pnpm --filter @eventhub/api-core... build
+RUN pnpm --filter @eventhub/api-core build
 
 # --- Migrations : drizzle-kit est une dépendance de dev, on part du build ---
 FROM build AS migrate
