@@ -79,7 +79,7 @@ L'API refuse de démarrer si une variable manque ou est invalide.
 cd apps/api-core && pnpm db:migrate && pnpm db:seed
 ```
 
-Le seed crée un organisateur de démo et une dizaine d'événements datés à partir d'aujourd'hui (dont un passé et un annulé). Il peut être relancé sans créer de doublons : il recale les dates des événements.
+Le seed crée un organisateur de démo et une dizaine d'événements datés à partir d'aujourd'hui (dont un passé et un annulé). Il peut être relancé sans créer de doublons : il remet à jour la date, la description et le lieu des événements de démo.
 
 Compte de démo, pour le développement local uniquement : `demo@eventhub.local` / `demo-password`.
 
