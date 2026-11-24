@@ -1,5 +1,9 @@
-import { eventSchema, eventSummarySchema } from '@eventhub/schemas';
-import { toEvent, toEventSummary } from './event.dto.js';
+import {
+  eventSchema,
+  eventSummarySchema,
+  organizerSchema,
+} from '@eventhub/schemas';
+import { toEvent, toEventSummary, toOrganizer } from './event.dto.js';
 import type { EventDetailRow, EventSummaryRow } from './events.schema.js';
 
 const row: EventSummaryRow = {
@@ -120,5 +124,21 @@ describe('toEvent', () => {
     expect(event).not.toHaveProperty('ticketCategories');
     expect(event).not.toHaveProperty('totalCapacity');
     expect(event).not.toHaveProperty('maxTicketsPerReservation');
+  });
+});
+
+describe('toOrganizer', () => {
+  it('returns the contract Organizer without email nor phone', () => {
+    const user = {
+      ...detail.organizer,
+      email: 'dalyll@exemple.fr',
+      phone: '+33612345678',
+      passwordHash: 'hash',
+    };
+
+    const organizer = toOrganizer(user);
+
+    expect(organizer).toEqual(detail.organizer);
+    expect(organizerSchema.strict().safeParse(organizer).success).toBe(true);
   });
 });

@@ -53,6 +53,8 @@ export type EventSummaryRow = Pick<
   'id' | 'title' | 'startsAt' | 'city' | 'imageUrl' | 'type' | 'status'
 >;
 
+export type OrganizerRow = Pick<UserRow, 'id' | 'firstName' | 'lastName'>;
+
 export type EventDetailRow = Omit<EventRow, 'organizerId'> & {
-  organizer: Pick<UserRow, 'id' | 'firstName' | 'lastName'>;
+  organizer: OrganizerRow;
 };
