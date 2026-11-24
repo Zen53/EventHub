@@ -1,11 +1,16 @@
 import {
+  createEventBodySchema,
+  createEventResponseSchema,
   eventIdParamsSchema,
   eventSchema,
   eventsListResponseSchema,
   listEventsQuerySchema,
 } from '@eventhub/schemas';
-import { RequestMethod } from '@nestjs/common';
-import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants.js';
+import { HttpStatus, RequestMethod } from '@nestjs/common';
+import {
+  HTTP_CODE_METADATA,
+  ROUTE_ARGS_METADATA,
+} from '@nestjs/common/constants.js';
 import { Reflector } from '@nestjs/core';
 import { AppError } from '../../core/errors/app-error.js';
 import { IS_PUBLIC_KEY } from '../../core/security/public.decorator.js';
@@ -41,6 +46,26 @@ const detail: EventDetailRow = {
   updatedAt: new Date('2026-11-13T10:00:00Z'),
 };
 
+const created: EventDetailRow = {
+  ...detail,
+  endsAt: new Date('2026-12-05T22:00:00Z'),
+  status: 'published',
+};
+
+const createBody = {
+  title: 'Concert de jazz',
+  description: 'Une soirée jazz avec le quartet de Lyon.',
+  startsAt: '2026-12-05T19:30:00Z',
+  endsAt: '2026-12-05T22:00:00Z',
+  location: {
+    name: 'Salle Molière',
+    address: '18 quai de Bondy',
+    city: 'Lyon',
+  },
+  imageUrl: null,
+  type: 'concert' as const,
+};
+
 function setup() {
   const events = {
     listUpcoming: vi.fn().mockResolvedValue({
@@ -48,12 +73,13 @@ function setup() {
       meta: { page: 1, limit: 20, total: 1 },
     }),
     getById: vi.fn().mockResolvedValue(detail),
+    create: vi.fn().mockResolvedValue(created),
   };
   const controller = new EventsController(events as unknown as EventsService);
   return { controller, events };
 }
 
-function argSchema(method: 'list' | 'getById') {
+function argSchema(method: 'list' | 'getById' | 'create', index = 0) {
   const args = Object.values(
     Reflect.getMetadata(
       ROUTE_ARGS_METADATA,
@@ -61,13 +87,20 @@ function argSchema(method: 'list' | 'getById') {
       method,
     ) as Record<string, { index: number; schema?: unknown }>,
   );
-  return args.find((arg) => arg.index === 0)?.schema;
+  return args.find((arg) => arg.index === index)?.schema;
 }
 
 function validateParams(params: Record<string, unknown>) {
   return createValidationPipe().transform(params, {
     type: 'param',
     schema: eventIdParamsSchema,
+  });
+}
+
+function validateBody(body: Record<string, unknown>) {
+  return createValidationPipe().transform(body, {
+    type: 'body',
+    schema: createEventBodySchema,
   });
 }
 
@@ -202,9 +235,63 @@ describe('EventsController params validation', () => {
   });
 });
 
+describe('EventsController.create', () => {
+  it('creates the event for the connected user and returns the full Event', async () => {
+    const { controller, events } = setup();
+
+    const response = await controller.create(
+      { userId: detail.organizer.id },
+      createBody,
+    );
+
+    expect(events.create).toHaveBeenCalledWith(detail.organizer.id, createBody);
+    expect(response).toMatchObject({
+      id: row.id,
+      startsAt: '2026-12-05T19:30:00.000Z',
+      endsAt: '2026-12-05T22:00:00.000Z',
+      status: 'published',
+      organizer: detail.organizer,
+    });
+    expect(createEventResponseSchema.safeParse(response).success).toBe(true);
+  });
+});
+
+describe('EventsController body validation', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ now: new Date('2026-11-24T10:00:00Z') });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('validates the body with createEventBodySchema', () => {
+    expect(argSchema('create', 1)).toBe(createEventBodySchema);
+  });
+
+  it('accepts a valid body', async () => {
+    await expect(validateBody(createBody)).resolves.toEqual(createBody);
+  });
+
+  it.each([
+    [{ startsAt: '2026-11-24T09:59:59Z', endsAt: null }, 'startsAt'],
+    [{ endsAt: '2026-12-05T19:30:00Z' }, 'endsAt'],
+    [{ endsAt: '2026-12-05T18:00:00Z' }, 'endsAt'],
+  ])('throws 400 VALIDATION_ERROR for %j', async (patch, field) => {
+    const promise = validateBody({ ...createBody, ...patch });
+
+    await expect(promise).rejects.toBeInstanceOf(AppError);
+    await expect(promise).rejects.toMatchObject({
+      status: 400,
+      code: 'VALIDATION_ERROR',
+      details: [expect.objectContaining({ field })],
+    });
+  });
+});
+
 describe('EventsController routing', () => {
   const reflector = new Reflector();
-  const handlerOf = (method: 'list' | 'getById') =>
+  const handlerOf = (method: 'list' | 'getById' | 'create') =>
     Object.getOwnPropertyDescriptor(EventsController.prototype, method)
       ?.value as () => unknown;
   const handler = handlerOf('list');
@@ -221,6 +308,15 @@ describe('EventsController routing', () => {
     expect(reflector.get('path', getById)).toBe(':id');
     expect(reflector.get('method', getById)).toBe(RequestMethod.GET);
     expect(reflector.get(IS_PUBLIC_KEY, getById)).toBe(true);
+  });
+
+  it('mounts create on POST /events with 201, for connected users only', () => {
+    const create = handlerOf('create');
+
+    expect(reflector.get('path', create)).toBe('/');
+    expect(reflector.get('method', create)).toBe(RequestMethod.POST);
+    expect(reflector.get(HTTP_CODE_METADATA, create)).toBe(HttpStatus.CREATED);
+    expect(reflector.get(IS_PUBLIC_KEY, create)).toBeUndefined();
   });
 
   it('is registered in EventsModule', () => {
