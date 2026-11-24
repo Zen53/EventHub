@@ -278,6 +278,25 @@ describe('OpenAPI documentation of the auth and /me routes', () => {
     expectErrorResponse(route, '404', 'EVENT_NOT_FOUND');
   });
 
+  it('documents POST /events for connected users, with the created Event', () => {
+    const route: Route = ['post', '/events'];
+    const { tags, security, summary } = operation(route);
+
+    expect(tags).toEqual(['Events']);
+    expect(security).toBeUndefined();
+    expect(summary).toBe('Créer un événement');
+    expect(Object.keys(operation(route).responses).sort()).toEqual([
+      '201',
+      '400',
+      '401',
+    ]);
+    expect(propertiesOf(jsonSchema(route, '201'))).toEqual(
+      expect.arrayContaining(['id', 'status', 'location', 'organizer']),
+    );
+    expectErrorResponse(route, '400', 'VALIDATION_ERROR');
+    expectErrorResponse(route, '401', 'UNAUTHORIZED');
+  });
+
   it('declares the shared ErrorResponse component once', () => {
     expect(document.components?.schemas).toHaveProperty('ErrorResponse');
   });
