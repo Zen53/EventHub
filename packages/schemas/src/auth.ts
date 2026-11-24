@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { strictBodyError } from './body.js';
 import {
   emailSchema,
   nameSchema,
@@ -6,11 +7,6 @@ import {
   phoneSchema,
   userSchema,
 } from './user.js';
-
-const strictBodyError = (issue: { code: string }) =>
-  issue.code === 'invalid_type'
-    ? 'Le corps de la requête doit être un objet JSON.'
-    : undefined;
 
 export const registerBodySchema = z.strictObject(
   {
