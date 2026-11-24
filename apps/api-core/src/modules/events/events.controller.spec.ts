@@ -163,11 +163,21 @@ describe('EventsController query validation', () => {
     });
   });
 
+  it('keeps a valid user_id', async () => {
+    const userId = 'a1b2c3d4-0000-4000-8000-000000000001';
+    await expect(validateQuery({ user_id: userId })).resolves.toEqual({
+      page: 1,
+      limit: 20,
+      user_id: userId,
+    });
+  });
+
   it.each([
     [{ limit: '51' }, 'limit'],
     [{ page: '0' }, 'page'],
     [{ page: 'abc' }, 'page'],
-    [{ user_id: 'a1b2c3d4-0000-4000-8000-000000000001' }, 'user_id'],
+    [{ user_id: 'abc' }, 'user_id'],
+    [{ city: 'Lyon' }, 'city'],
   ])('throws 400 VALIDATION_ERROR for %j', async (query, field) => {
     const promise = validateQuery(query);
 

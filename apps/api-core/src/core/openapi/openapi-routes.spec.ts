@@ -238,6 +238,7 @@ describe('OpenAPI documentation of the auth and /me routes', () => {
     ).toEqual([
       ['page', 'query'],
       ['limit', 'query'],
+      ['user_id', 'query'],
     ]);
     expectErrorResponse(route, '400', 'VALIDATION_ERROR');
   });

@@ -20,10 +20,12 @@ export class EventsService {
   async listUpcoming({
     page,
     limit,
+    user_id: organizerId,
   }: ListEventsQuery): Promise<UpcomingEvents> {
     const { rows, total } = await this.repository.findUpcoming(
       limit,
       (page - 1) * limit,
+      organizerId,
     );
     return { rows, meta: { page, limit, total } };
   }

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { asc, eq, gt, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, sql } from 'drizzle-orm';
 import { type Database, InjectDatabase } from '../../core/database/index.js';
 import { users } from '../users/users.schema.js';
 import {
@@ -51,8 +51,15 @@ const detailColumns = {
 export class EventsRepository {
   constructor(@InjectDatabase() private readonly db: Database) {}
 
-  async findUpcoming(limit: number, offset: number): Promise<EventsPage> {
-    const upcoming = gt(events.startsAt, sql`now()`);
+  async findUpcoming(
+    limit: number,
+    offset: number,
+    organizerId?: string,
+  ): Promise<EventsPage> {
+    const upcoming = and(
+      gt(events.startsAt, sql`now()`),
+      organizerId ? eq(events.organizerId, organizerId) : undefined,
+    );
     const [rows, total] = await Promise.all([
       this.db
         .select(summaryColumns)

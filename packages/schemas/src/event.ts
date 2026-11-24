@@ -171,6 +171,9 @@ export const listEventsQuerySchema = z.strictObject({
     .min(1, 'La limite doit être comprise entre 1 et 50.')
     .max(EVENTS_MAX_LIMIT, 'La limite doit être comprise entre 1 et 50.')
     .default(20),
+  user_id: z
+    .uuid({ error: "L'identifiant de l'organisateur doit être un UUID." })
+    .optional(),
 });
 
 export type ListEventsQuery = z.infer<typeof listEventsQuerySchema>;
