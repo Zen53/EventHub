@@ -1,0 +1,9 @@
+packages:
+  - apps/*
+  - packages/*
+
+allowBuilds:
+  esbuild: false
+  '@scarf/scarf': false
+  sharp: false
+  unrs-resolver: false

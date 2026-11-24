@@ -4,10 +4,10 @@ Schémas Zod partagés entre `apps/api-core` et `apps/web`. Ils sont la source d
 
 ## Installation
 
-Le package est lié en local dans chaque app :
+Le package fait partie du workspace pnpm. Chaque app le déclare comme dépendance du workspace :
 
 ```json
-"@eventhub/schemas": "link:../../packages/schemas"
+"@eventhub/schemas": "workspace:*"
 ```
 
 `zod` 4 est une peer dependency : l'app consommatrice l'installe elle-même.

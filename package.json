@@ -1,22 +1,22 @@
 {
+  "name": "eventhub",
   "private": true,
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
+  "packageManager": "pnpm@12.11.2",
   "scripts": {
-    "install:all": "cd packages/schemas && pnpm install && cd ../../apps/api-core && pnpm install && cd ../web && pnpm install",
-    "build:schemas": "cd packages/schemas && pnpm build",
-    "dev:schemas": "cd packages/schemas && pnpm dev",
-    "start:api": "cd apps/api-core && pnpm start:dev",
-    "start:web": "cd apps/web && pnpm dev",
-    "test": "pnpm test:schemas && pnpm test:api",
-    "test:api": "cd apps/api-core && pnpm test",
-    "test:schemas": "cd packages/schemas && pnpm test",
-    "lint:api": "cd apps/api-core && pnpm lint",
-    "typecheck:api": "cd apps/api-core && pnpm typecheck",
-    "format:check:api": "cd apps/api-core && pnpm format:check",
-    "lint:web": "cd apps/web && pnpm lint",
-    "typecheck:web": "cd apps/web && pnpm typecheck"
+    "build": "pnpm -r build",
+    "build:schemas": "pnpm --filter @eventhub/schemas build",
+    "dev:schemas": "pnpm --filter @eventhub/schemas dev",
+    "start:api": "pnpm --filter @eventhub/api-core start:dev",
+    "start:web": "pnpm --filter @eventhub/web dev",
+    "test": "pnpm -r test",
+    "test:api": "pnpm --filter @eventhub/api-core test",
+    "test:schemas": "pnpm --filter @eventhub/schemas test",
+    "lint": "pnpm -r lint",
+    "lint:api": "pnpm --filter @eventhub/api-core lint",
+    "lint:web": "pnpm --filter @eventhub/web lint",
+    "typecheck": "pnpm -r typecheck",
+    "typecheck:api": "pnpm --filter @eventhub/api-core typecheck",
+    "typecheck:web": "pnpm --filter @eventhub/web typecheck",
+    "format:check:api": "pnpm --filter @eventhub/api-core format:check"
   }
 }

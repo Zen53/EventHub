@@ -47,14 +47,14 @@ docker compose down -v
 
 ## Lancer le projet en local
 
-Prérequis : Node 22.12 ou plus récent (24 recommandé), pnpm et un PostgreSQL local.
+Prérequis : Node 22.12 ou plus récent (24 recommandé), pnpm 12 et un PostgreSQL local.
 
 ### 1. Installer
 
-Depuis la racine du dépôt, installer les trois projets et construire `packages/schemas` :
+Le dépôt est un workspace pnpm. Depuis la racine, une seule commande installe le front, l'API et `packages/schemas`, puis construit les schémas :
 
 ```bash
-pnpm install:all
+pnpm install
 ```
 
 ### 2. Configurer l'API
@@ -104,9 +104,7 @@ pnpm test
 ```
 
 ```bash
-pnpm lint:api && pnpm typecheck:api && pnpm format:check:api
+pnpm lint && pnpm typecheck && pnpm format:check:api
 ```
 
-```bash
-pnpm lint:web && pnpm typecheck:web
-```
+Chaque commande tourne sur tous les projets du workspace. Les variantes `:api`, `:web` et `:schemas` (`pnpm lint:web`, `pnpm test:api`…) ciblent un seul projet.
