@@ -29,6 +29,13 @@
       "when": 1795438414790,
       "tag": "0003_adorable_wrecking_crew",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1795517208853,
+      "tag": "0004_events_organizer_id_idx",
+      "breakpoints": true
     }
   ]
 }
