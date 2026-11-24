@@ -42,7 +42,12 @@ async function seed(): Promise<void> {
       .values(buildDemoEvents(new Date(), organizer.id))
       .onConflictDoUpdate({
         target: events.id,
-        set: { startsAt: sql`excluded.starts_at` },
+        set: {
+          startsAt: sql`excluded.starts_at`,
+          description: sql`excluded.description`,
+          locationName: sql`excluded.location_name`,
+          locationAddress: sql`excluded.location_address`,
+        },
       })
       .returning({ id: events.id });
 
