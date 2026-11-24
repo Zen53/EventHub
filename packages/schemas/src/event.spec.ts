@@ -127,7 +127,21 @@ describe('event schemas', () => {
       });
     });
 
+    it('accepts a user_id to keep the events of one organizer', () => {
+      const userId = 'a1b2c3d4-0000-4000-8000-000000000001';
+      expect(listEventsQuerySchema.parse({ user_id: userId })).toEqual({
+        page: 1,
+        limit: 20,
+        user_id: userId,
+      });
+    });
+
     it.each([
+      [
+        { user_id: 'abc' },
+        'user_id',
+        "L'identifiant de l'organisateur doit être un UUID.",
+      ],
       [{ page: '0' }, 'page', 'La page doit être supérieure ou égale à 1.'],
       [{ page: '1.5' }, 'page', 'La page doit être un entier.'],
       [{ page: 'abc' }, 'page', 'La page doit être un entier.'],
@@ -142,7 +156,7 @@ describe('event schemas', () => {
     });
 
     it('rejects an unknown parameter', () => {
-      const result = listEventsQuerySchema.safeParse({ user_id: 'x' });
+      const result = listEventsQuerySchema.safeParse({ city: 'Lyon' });
       expect(result.success).toBe(false);
       expect(result.error?.issues[0].code).toBe('unrecognized_keys');
     });

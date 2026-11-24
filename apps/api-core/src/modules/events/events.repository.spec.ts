@@ -93,6 +93,21 @@ describe('EventsRepository.findUpcoming', () => {
     expect(db.$count).toHaveBeenCalledWith(events, condition);
   });
 
+  it('keeps only the upcoming events of the organizer, for the rows and the total', async () => {
+    const { repository, db, selectQuery } = setup();
+    const organizerId = 'a1b2c3d4-0000-4000-8000-000000000001';
+
+    await repository.findUpcoming(20, 0, organizerId);
+
+    const condition = selectQuery.where.mock.calls[0]?.[0] as SQL;
+    const query = dialect.sqlToQuery(condition);
+    expect(query.sql).toBe(
+      '("events"."starts_at" > now() and "events"."organizer_id" = $1)',
+    );
+    expect(query.params).toEqual([organizerId]);
+    expect(db.$count).toHaveBeenCalledWith(events, condition);
+  });
+
   it('sorts by start date, then by id, and applies the limit and the offset', async () => {
     const { repository, selectQuery } = setup();
 

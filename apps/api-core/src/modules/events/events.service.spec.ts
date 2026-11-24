@@ -23,7 +23,7 @@ describe('EventsService.listUpcoming', () => {
 
     await service.listUpcoming({ page: 1, limit: 20 });
 
-    expect(repository.findUpcoming).toHaveBeenCalledWith(20, 0);
+    expect(repository.findUpcoming).toHaveBeenCalledWith(20, 0, undefined);
   });
 
   it('skips the previous pages', async () => {
@@ -31,7 +31,16 @@ describe('EventsService.listUpcoming', () => {
 
     await service.listUpcoming({ page: 3, limit: 10 });
 
-    expect(repository.findUpcoming).toHaveBeenCalledWith(10, 20);
+    expect(repository.findUpcoming).toHaveBeenCalledWith(10, 20, undefined);
+  });
+
+  it('passes the user_id as the organizer to keep', async () => {
+    const { service, repository } = setup();
+    const userId = 'a1b2c3d4-0000-4000-8000-000000000001';
+
+    await service.listUpcoming({ page: 1, limit: 20, user_id: userId });
+
+    expect(repository.findUpcoming).toHaveBeenCalledWith(20, 0, userId);
   });
 
   it('returns the rows with the page, the limit and the total', async () => {
