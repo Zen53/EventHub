@@ -22,7 +22,6 @@ export default function ForgotPasswordRequestForm() {
 
     setEmailError(undefined);
     setEmail(result.data);
-    // EV-79 : appel API. Pour EV-77 on affiche seulement la confirmation.
     setSent(true);
   }
 
