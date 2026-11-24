@@ -31,7 +31,7 @@
 $ pnpm install
 ```
 
-Requires Node 22.12+ (24 recommended) and pnpm. From the repo root, `pnpm install:all` installs every project and builds `packages/schemas`.
+Requires Node 22.12+ (24 recommended) and pnpm 12. The repo is a pnpm workspace: `pnpm install` from the root installs every project and builds `packages/schemas`.
 Copy `.env.example` to `.env` (`cp .env.example .env`), then run `pnpm start:api` from the root (or `pnpm start:dev` here).
 The app refuses to start when a variable of `src/core/config/env.schema.ts` is missing or invalid.
 

@@ -1,5 +1,5 @@
 {
-  "name": "frontend",
+  "name": "@eventhub/web",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -10,7 +10,7 @@
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
-    "@eventhub/schemas": "link:../../packages/schemas",
+    "@eventhub/schemas": "workspace:*",
     "next": "16.4.6",
     "react": "19.3.0",
     "react-dom": "19.3.0",
@@ -25,6 +25,5 @@
     "eslint-config-next": "16.4.6",
     "tailwindcss": "4.3.3",
     "typescript": "^5"
-  },
-  "packageManager": "pnpm@10.26.0"
+  }
 }
