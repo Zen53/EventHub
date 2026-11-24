@@ -18,8 +18,6 @@ EventHub est une plateforme de billetterie d'événements. Les visiteurs y déco
 - Réserver des billets pour un événement.
 - Modifier son profil, réinitialiser son mot de passe et supprimer son compte.
 
-Les contrats d'API détaillés sont dans [`docs/`](docs/) : [événements](docs/contrat-event.md) et [utilisateurs](docs/contrat-user.md).
-
 ## Organisation du dépôt
 
 | Dossier | Rôle |
