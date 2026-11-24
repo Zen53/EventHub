@@ -1,0 +1,1 @@
+CREATE INDEX "events_organizer_id_idx" ON "events" USING btree ("organizer_id");
