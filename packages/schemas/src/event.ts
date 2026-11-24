@@ -123,6 +123,8 @@ export const createEventBodySchema = z
       type: z.enum(eventTypes, {
         error: `Le type doit valoir ${eventTypes.join(', ')}.`,
       }),
+      ticketCategories: z.unknown().optional(),
+      maxTicketsPerReservation: z.unknown().optional(),
     },
     { error: strictBodyError },
   )
@@ -140,6 +142,13 @@ export const createEventBodySchema = z
             issue.path?.[0] !== 'startsAt' && issue.path?.[0] !== 'endsAt',
         ),
     },
+  )
+  .transform(
+    ({
+      ticketCategories: _ticketCategories,
+      maxTicketsPerReservation: _maxTicketsPerReservation,
+      ...body
+    }) => body,
   );
 
 export type CreateEventBody = z.infer<typeof createEventBodySchema>;

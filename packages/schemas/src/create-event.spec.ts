@@ -175,10 +175,27 @@ describe('createEventBodySchema', () => {
   });
 
   it.each([
+    [
+      {
+        ticketCategories: [
+          { name: 'Fosse', priceCents: 2500, capacity: 300 },
+        ],
+        maxTicketsPerReservation: 4,
+      },
+    ],
+    [{ ticketCategories: 'pas une liste', maxTicketsPerReservation: -1 }],
+    [{ ticketCategories: null }],
+  ])('ignores the ticketing fields %j without a validation error', (patch) => {
+    const parsed = createEventBodySchema.parse({ ...body, ...patch });
+
+    expect(parsed).toEqual(body);
+    expect(parsed).not.toHaveProperty('ticketCategories');
+    expect(parsed).not.toHaveProperty('maxTicketsPerReservation');
+  });
+
+  it.each([
     ['status', { status: 'cancelled' }],
     ['organizer', { organizer: { id: 'x' } }],
-    ['ticketCategories', { ticketCategories: [] }],
-    ['maxTicketsPerReservation', { maxTicketsPerReservation: 4 }],
   ])('rejects the field %s that the client does not send', (key, patch) => {
     const result = createEventBodySchema.safeParse({ ...body, ...patch });
 
