@@ -6,7 +6,7 @@ EventHub est une plateforme de billetterie d'événements. Les visiteurs y déco
 
 **Aujourd'hui**
 
-- Parcourir le catalogue des événements à venir, avec leur ville, leur type et leur date.
+- Parcourir le catalogue des événements à venir, page par page, avec leur date, leur heure et leur ville.
 - Ouvrir la fiche d'un événement : description, date, heure et lieu.
 - Créer un compte, se connecter et se déconnecter.
 - Consulter son profil.
