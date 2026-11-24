@@ -97,8 +97,21 @@ export default function LoginForm() {
         ) : null}
       </label>
 
-      <label className="flex flex-col gap-1.5 text-sm" htmlFor="password">
-        <span className="font-medium text-[#1a120e]">Mot de passe</span>
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-baseline justify-between gap-3">
+          <label
+            htmlFor="password"
+            className="text-sm font-medium text-[#1a120e]"
+          >
+            Mot de passe
+          </label>
+          <Link
+            href="/mot-de-passe-oublie"
+            className="text-sm font-medium text-[#e24a1b] transition hover:text-[#c73d14]"
+          >
+            Mot de passe oublié ?
+          </Link>
+        </div>
         <input
           id="password"
           name="password"
@@ -111,14 +124,14 @@ export default function LoginForm() {
             setErrors((current) => ({ ...current, password: undefined }));
             setFormError(undefined);
           }}
-          className={`h-12 rounded-xl border bg-white px-4 text-[#1a120e] outline-none transition focus:border-[#e24a1b] ${
+          className={`h-12 rounded-xl border bg-white px-4 text-sm text-[#1a120e] outline-none transition focus:border-[#e24a1b] ${
             errors.password ? "border-[#c2410c]" : "border-[#e6dfd4]"
           }`}
         />
         {errors.password ? (
           <span className="text-xs text-[#c2410c]">{errors.password}</span>
         ) : null}
-      </label>
+      </div>
 
       {formError ? (
         <p
