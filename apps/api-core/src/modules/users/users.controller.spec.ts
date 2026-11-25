@@ -20,7 +20,7 @@ const row: UserRow = {
 };
 
 function setup() {
-  const users = { findById: vi.fn() };
+  const users = { findById: vi.fn(), updateProfile: vi.fn() };
   const controller = new UsersController(users as unknown as UsersService);
   return { controller, users };
 }
@@ -62,17 +62,57 @@ describe('UsersController.getMe', () => {
   });
 });
 
+describe('UsersController.updateMe', () => {
+  it('updates the identified user with the body and returns the User', async () => {
+    const { controller, users } = setup();
+    users.updateProfile.mockResolvedValue({ ...row, phone: null });
+    const body = { firstName: 'Camille', phone: null };
+
+    const user = await controller.updateMe({ userId: row.id }, body);
+
+    expect(users.updateProfile).toHaveBeenCalledWith(row.id, body);
+    expect(user).toEqual({
+      id: row.id,
+      email: 'camille@exemple.fr',
+      firstName: 'Camille',
+      lastName: 'Durand',
+      phone: null,
+      createdAt: '2026-11-13T10:00:00.000Z',
+      updatedAt: '2026-11-14T08:30:00.000Z',
+    });
+    expect(user).not.toHaveProperty('passwordHash');
+    expect(userSchema.safeParse(user).success).toBe(true);
+  });
+
+  it('lets the errors of the service through', async () => {
+    const { controller, users } = setup();
+    const error = new AppError('EMAIL_ALREADY_USED');
+    users.updateProfile.mockRejectedValue(error);
+
+    await expect(
+      controller.updateMe(
+        { userId: row.id },
+        { email: 'pris@exemple.fr', currentPassword: 'motdepasse123' },
+      ),
+    ).rejects.toBe(error);
+  });
+});
+
 describe('UsersController routing', () => {
   const reflector = new Reflector();
-  const handler = Object.getOwnPropertyDescriptor(
-    UsersController.prototype,
-    'getMe',
-  )?.value as () => unknown;
+  const handlerOf = (name: 'getMe' | 'updateMe') =>
+    Object.getOwnPropertyDescriptor(UsersController.prototype, name)
+      ?.value as () => unknown;
 
-  it('is mounted on GET /me', () => {
+  it.each([
+    ['getMe', RequestMethod.GET],
+    ['updateMe', RequestMethod.PATCH],
+  ] as const)('mounts %s on /me', (name, method) => {
+    const handler = handlerOf(name);
+
     expect(reflector.get('path', UsersController)).toBe('me');
     expect(reflector.get('path', handler)).toBe('/');
-    expect(reflector.get('method', handler)).toBe(RequestMethod.GET);
+    expect(reflector.get('method', handler)).toBe(method);
   });
 
   it('is registered in UsersModule', () => {
@@ -81,8 +121,11 @@ describe('UsersController routing', () => {
     );
   });
 
-  it('is not public, neither on the class nor on the handler', () => {
-    expect(reflector.get(IS_PUBLIC_KEY, UsersController)).toBeUndefined();
-    expect(reflector.get(IS_PUBLIC_KEY, handler)).toBeUndefined();
-  });
+  it.each(['getMe', 'updateMe'] as const)(
+    'does not make %s public, neither on the class nor on the handler',
+    (name) => {
+      expect(reflector.get(IS_PUBLIC_KEY, UsersController)).toBeUndefined();
+      expect(reflector.get(IS_PUBLIC_KEY, handlerOf(name))).toBeUndefined();
+    },
+  );
 });

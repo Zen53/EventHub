@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import type { UpdateMeBody } from '@eventhub/schemas';
 import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { AppError } from '../../core/errors/app-error.js';
 import { PasswordHasher } from './password-hasher.js';
-import { UsersRepository } from './users.repository.js';
+import { isEmailConflict, UsersRepository } from './users.repository.js';
 import type { UserRow } from './users.schema.js';
 
 export interface CreateUserInput {
@@ -45,6 +46,40 @@ export class UsersService implements OnModuleInit {
 
   findById(id: string): Promise<UserRow | null> {
     return this.repository.findById(id);
+  }
+
+  async updateProfile(
+    id: string,
+    { currentPassword, ...changes }: UpdateMeBody,
+  ): Promise<UserRow> {
+    const user = await this.repository.findById(id);
+    if (!user) {
+      throw new AppError('UNAUTHORIZED');
+    }
+    if (changes.email !== undefined) {
+      const valid =
+        currentPassword !== undefined &&
+        (await this.hasher.verify(user.passwordHash, currentPassword));
+      if (!valid) {
+        throw new AppError('WRONG_PASSWORD');
+      }
+    }
+    const row = await this.repository
+      .update(id, {
+        ...changes,
+        ...(changes.email !== undefined && {
+          email: normalizeEmail(changes.email),
+        }),
+      })
+      .catch((error: unknown) => {
+        throw isEmailConflict(error)
+          ? new AppError('EMAIL_ALREADY_USED')
+          : error;
+      });
+    if (!row) {
+      throw new AppError('UNAUTHORIZED');
+    }
+    return row;
   }
 
   async verifyCredentials(

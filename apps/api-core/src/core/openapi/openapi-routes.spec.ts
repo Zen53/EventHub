@@ -13,7 +13,7 @@ vi.mock('drizzle-orm/postgres-js', () => ({
   drizzle: vi.fn(() => ({ $client: { end: vi.fn() } })),
 }));
 
-type Route = readonly ['get' | 'post', string];
+type Route = readonly ['get' | 'post' | 'patch', string];
 
 const routes: readonly Route[] = [
   ['post', '/auth/register'],
@@ -21,6 +21,7 @@ const routes: readonly Route[] = [
   ['post', '/auth/refresh'],
   ['post', '/auth/logout'],
   ['get', '/me'],
+  ['patch', '/me'],
 ];
 
 describe('OpenAPI documentation of the auth and /me routes', () => {
@@ -101,6 +102,7 @@ describe('OpenAPI documentation of the auth and /me routes', () => {
     [routes[2], ['200', '401']],
     [routes[3], ['204']],
     [routes[4], ['200', '401']],
+    [routes[5], ['200', '400', '401', '403', '409']],
   ] as const)('documents the responses of %j', (route, statuses) => {
     expect(Object.keys(operation(route).responses).sort()).toEqual([
       ...statuses,
@@ -168,6 +170,38 @@ describe('OpenAPI documentation of the auth and /me routes', () => {
     expectErrorResponse(routes[4], '401', 'UNAUTHORIZED');
   });
 
+  it('returns the updated User on PATCH /me, with its errors', () => {
+    expect(propertiesOf(jsonSchema(routes[5], '200'))).toEqual(
+      expect.arrayContaining(['id', 'email', 'phone', 'updatedAt']),
+    );
+    expect(propertiesOf(jsonSchema(routes[5], '200'))).not.toContain(
+      'passwordHash',
+    );
+    expectErrorResponse(routes[5], '400', 'VALIDATION_ERROR');
+    expectErrorResponse(routes[5], '401', 'UNAUTHORIZED');
+    expectErrorResponse(routes[5], '403', 'WRONG_PASSWORD');
+    expectErrorResponse(routes[5], '409', 'EMAIL_ALREADY_USED');
+  });
+
+  it('documents the optional fields of the PATCH /me body', () => {
+    const body = operation(routes[5]).requestBody;
+    if (!body || !('content' in body)) {
+      throw new Error('No request body for PATCH /me');
+    }
+    const schema = resolve(body.content['application/json']?.schema);
+
+    expect(propertiesOf(schema)).toEqual([
+      'email',
+      'firstName',
+      'lastName',
+      'phone',
+      'currentPassword',
+    ]);
+    expect(schema?.required ?? []).toEqual([]);
+    expect(schema?.additionalProperties).toBe(false);
+    expect(operation(routes[5]).description).toContain('currentPassword');
+  });
+
   it('resolves the security of every operation from its handler', () => {
     const operations = Object.values(document.paths).flatMap((pathItem) =>
       (['get', 'post', 'put', 'patch', 'delete'] as const).flatMap(
@@ -193,13 +227,14 @@ describe('OpenAPI documentation of the auth and /me routes', () => {
     [routes[2], [{ cookie: [] }]],
     [routes[3], [{ cookie: [] }]],
     [routes[4], undefined],
+    [routes[5], undefined],
   ] as const)('declares the security of %j', (route, security) => {
     expect(operation(route).security).toEqual(security);
   });
 
   it('documents 400 VALIDATION_ERROR only on routes with a body', () => {
     expect(routes.filter((route) => operation(route).responses['400'])).toEqual(
-      [routes[0], routes[1]],
+      [routes[0], routes[1], routes[5]],
     );
   });
 
@@ -208,6 +243,8 @@ describe('OpenAPI documentation of the auth and /me routes', () => {
     [routes[1], '400', 'VALIDATION_ERROR'],
     [routes[2], '401', 'INVALID_REFRESH_TOKEN'],
     [routes[4], '401', 'UNAUTHORIZED'],
+    [routes[5], '403', 'WRONG_PASSWORD'],
+    [routes[5], '409', 'EMAIL_ALREADY_USED'],
   ] as const)('shows %j %s with a %s example', (route, status, code) => {
     const examples = response(route, status).content?.['application/json']
       ?.examples as Record<string, { value: { error: { code: string } } }>;
