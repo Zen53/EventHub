@@ -102,3 +102,17 @@ export const updateMeBodySchema = z
   );
 
 export type UpdateMeBody = z.infer<typeof updateMeBodySchema>;
+
+export const changePasswordBodySchema = z.strictObject(
+  {
+    // Pas les règles de passwordSchema : un ancien mot de passe créé avant un durcissement doit rester accepté.
+    currentPassword: z
+      .string({ error: 'Le mot de passe actuel est obligatoire.' })
+      .min(1, 'Le mot de passe actuel est obligatoire.')
+      .max(72, 'Le mot de passe actuel doit contenir au plus 72 caractères.'),
+    newPassword: passwordSchema,
+  },
+  { error: strictBodyError },
+);
+
+export type ChangePasswordBody = z.infer<typeof changePasswordBodySchema>;
