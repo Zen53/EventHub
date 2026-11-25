@@ -34,6 +34,13 @@ export const loginBodySchema = z.strictObject(
 
 export type LoginBody = z.infer<typeof loginBodySchema>;
 
+export const forgotPasswordBodySchema = z.strictObject(
+  { email: emailSchema },
+  { error: strictBodyError },
+);
+
+export type ForgotPasswordBody = z.infer<typeof forgotPasswordBodySchema>;
+
 export const loginResponseSchema = z.object({
   accessToken: z.string(),
   user: userSchema,

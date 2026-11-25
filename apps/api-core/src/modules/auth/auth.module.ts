@@ -3,12 +3,20 @@ import { UsersModule } from '../users/index.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
 import { PasswordController } from './password.controller.js';
+import { PasswordResetService } from './password-reset.service.js';
+import { PasswordResetTokensRepository } from './password-reset-tokens.repository.js';
 import { RefreshTokenService } from './refresh-token.service.js';
 import { RevokedRefreshTokensRepository } from './revoked-refresh-tokens.repository.js';
 
 @Module({
   imports: [UsersModule],
   controllers: [AuthController, PasswordController],
-  providers: [AuthService, RefreshTokenService, RevokedRefreshTokensRepository],
+  providers: [
+    AuthService,
+    RefreshTokenService,
+    RevokedRefreshTokensRepository,
+    PasswordResetService,
+    PasswordResetTokensRepository,
+  ],
 })
 export class AuthModule {}

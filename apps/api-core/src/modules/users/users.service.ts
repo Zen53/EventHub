@@ -52,6 +52,10 @@ export class UsersService implements OnModuleInit {
     return this.repository.findById(id);
   }
 
+  findByEmail(email: string): Promise<UserRow | null> {
+    return this.repository.findByEmail(normalizeEmail(email));
+  }
+
   async updateProfile(
     id: string,
     { currentPassword, email, firstName, lastName, phone }: UpdateMeBody,

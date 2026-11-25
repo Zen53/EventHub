@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
-export const envSchema = z.object({
+export const DEVELOPMENT_WEB_URL = 'http://localhost:3000';
+
+export const envVariablesSchema = z.object({
   NODE_ENV: z
     .enum(['development', 'production', 'test'])
     .default('development'),
@@ -15,6 +17,22 @@ export const envSchema = z.object({
   SMTP_URL: z.url({ protocol: /^smtps?$/ }),
   SMTP_STARTTLS: z.enum(['required', 'opportunistic', 'never']).optional(),
   MAIL_FROM: z.string().trim().min(1),
+  WEB_URL: z.url({ protocol: /^https?$/ }).optional(),
+});
+
+export const envSchema = envVariablesSchema.transform((env, context) => {
+  if (env.WEB_URL !== undefined) {
+    return { ...env, WEB_URL: env.WEB_URL };
+  }
+  if (env.NODE_ENV === 'development') {
+    return { ...env, WEB_URL: DEVELOPMENT_WEB_URL };
+  }
+  context.addIssue({
+    code: 'custom',
+    path: ['WEB_URL'],
+    message: 'Required when NODE_ENV is not development',
+  });
+  return z.NEVER;
 });
 
 export type Env = z.infer<typeof envSchema>;

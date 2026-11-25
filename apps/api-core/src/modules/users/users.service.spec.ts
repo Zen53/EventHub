@@ -115,6 +115,25 @@ describe('UsersService.findById', () => {
   });
 });
 
+describe('UsersService.findByEmail', () => {
+  it('looks the row up by the trimmed, lowercased email', async () => {
+    const { service, repository } = setup();
+    repository.findByEmail.mockResolvedValue(row);
+
+    await expect(service.findByEmail(' Camille@Exemple.FR ')).resolves.toBe(
+      row,
+    );
+    expect(repository.findByEmail).toHaveBeenCalledWith('camille@exemple.fr');
+  });
+
+  it('returns null when no account has this email', async () => {
+    const { service, repository } = setup();
+    repository.findByEmail.mockResolvedValue(null);
+
+    await expect(service.findByEmail('inconnu@exemple.fr')).resolves.toBeNull();
+  });
+});
+
 describe('UsersService.updateProfile', () => {
   const updated: UserRow = { ...row, firstName: 'Camille-Marie' };
 
