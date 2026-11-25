@@ -16,6 +16,8 @@ import {
   refreshResponseSchema,
   type RegisterBody,
   registerBodySchema,
+  type ResetPasswordBody,
+  resetPasswordBodySchema,
   userSchema,
 } from '@eventhub/schemas';
 import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
@@ -143,6 +145,20 @@ export class AuthController {
     @Body({ schema: forgotPasswordBodySchema }) body: ForgotPasswordBody,
   ): Promise<void> {
     await this.passwordResets.request(body.email);
+  }
+
+  @Public()
+  @ApiEndpoint('Choisir un nouveau mot de passe', {
+    description:
+      'Change le mot de passe avec le jeton reçu par email, qui ne sert qu’une fois, et invalide tous les refresh tokens de l’utilisateur.',
+    errors: ['INVALID_RESET_TOKEN'],
+  })
+  @Post('reset-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async resetPassword(
+    @Body({ schema: resetPasswordBodySchema }) body: ResetPasswordBody,
+  ): Promise<void> {
+    await this.passwordResets.reset(body.token, body.newPassword);
   }
 }
 

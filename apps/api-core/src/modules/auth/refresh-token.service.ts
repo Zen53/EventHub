@@ -20,6 +20,7 @@ export interface IssuedRefreshToken {
 export interface VerifiedRefreshToken {
   userId: string;
   jti: string;
+  issuedAt: Date;
   expiresAt: Date;
 }
 
@@ -57,7 +58,7 @@ export class RefreshTokenService {
   }
 
   async verify(token: string): Promise<VerifiedRefreshToken> {
-    let claims: { sub?: unknown; jti?: unknown; exp?: unknown };
+    let claims: { sub?: unknown; jti?: unknown; iat?: unknown; exp?: unknown };
     try {
       claims = await this.verifier.verify(token);
     } catch (error) {
@@ -66,17 +67,23 @@ export class RefreshTokenService {
       }
       throw error;
     }
-    const { sub, jti, exp } = claims;
+    const { sub, jti, iat, exp } = claims;
     if (
       typeof sub !== 'string' ||
       sub === '' ||
       typeof jti !== 'string' ||
       jti === '' ||
+      typeof iat !== 'number' ||
       typeof exp !== 'number'
     ) {
       throw invalidRefreshToken();
     }
-    return { userId: sub, jti, expiresAt: new Date(exp * 1000) };
+    return {
+      userId: sub,
+      jti,
+      issuedAt: new Date(iat * 1000),
+      expiresAt: new Date(exp * 1000),
+    };
   }
 
   revoke({ jti, expiresAt }: VerifiedRefreshToken): Promise<boolean> {

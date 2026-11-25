@@ -88,3 +88,54 @@ describe('PasswordResetTokensRepository.replaceForUser', () => {
     expect(tx.insert).not.toHaveBeenCalled();
   });
 });
+
+describe('PasswordResetTokensRepository.consume', () => {
+  const tokenHash = 'b'.repeat(64);
+
+  function setupConsume(rows: { userId: string }[]) {
+    const updateQuery = {
+      set: vi.fn(),
+      where: vi.fn(),
+      returning: vi.fn().mockResolvedValue(rows),
+    };
+    updateQuery.set.mockReturnValue(updateQuery);
+    updateQuery.where.mockReturnValue(updateQuery);
+    const db = { update: vi.fn(() => updateQuery) };
+    const repository = new PasswordResetTokensRepository(
+      db as unknown as Database,
+    );
+    return { repository, db, updateQuery };
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('marks as used the token that is neither used nor expired, in one statement, and returns its user', async () => {
+    const { repository, db, updateQuery } = setupConsume([
+      { userId: values.userId },
+    ]);
+
+    await expect(repository.consume(tokenHash)).resolves.toBe(values.userId);
+
+    expect(db.update).toHaveBeenCalledTimes(1);
+    expect(db.update).toHaveBeenCalledWith(passwordResetTokens);
+    expect(updateQuery.set).toHaveBeenCalledWith({ usedAt: NOW });
+    const { sql, params } = render(updateQuery.where.mock.calls[0][0] as SQL);
+    expect(sql).toBe(
+      '("password_reset_tokens"."token_hash" = $1 and "password_reset_tokens"."used_at" is null and "password_reset_tokens"."expires_at" > $2)',
+    );
+    expect(params).toEqual([tokenHash, NOW.toISOString()]);
+  });
+
+  it('returns null when no token matches', async () => {
+    const { repository } = setupConsume([]);
+
+    await expect(repository.consume(tokenHash)).resolves.toBeNull();
+  });
+});

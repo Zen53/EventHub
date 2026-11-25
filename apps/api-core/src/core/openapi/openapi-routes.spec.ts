@@ -23,6 +23,7 @@ const routes: readonly Route[] = [
   ['get', '/me'],
   ['patch', '/me'],
   ['post', '/auth/forgot-password'],
+  ['post', '/auth/reset-password'],
 ];
 
 describe('OpenAPI documentation of the auth and /me routes', () => {
@@ -174,6 +175,12 @@ describe('OpenAPI documentation of the auth and /me routes', () => {
     expect(operation(routes[6]).description).toContain('204');
   });
 
+  it('answers 204 without a body on reset-password, with its errors', () => {
+    expect(response(routes[7], '204').content).toBeUndefined();
+    expectErrorResponse(routes[7], '400', 'VALIDATION_ERROR');
+    expectErrorResponse(routes[7], '400', 'INVALID_RESET_TOKEN');
+  });
+
   it('returns the User on GET /me', () => {
     expect(propertiesOf(jsonSchema(routes[4], '200'))).toEqual(
       expect.arrayContaining(['id', 'email', 'phone', 'updatedAt']),
@@ -240,13 +247,14 @@ describe('OpenAPI documentation of the auth and /me routes', () => {
     [routes[4], undefined],
     [routes[5], undefined],
     [routes[6], []],
+    [routes[7], []],
   ] as const)('declares the security of %j', (route, security) => {
     expect(operation(route).security).toEqual(security);
   });
 
   it('documents 400 VALIDATION_ERROR only on routes with a body', () => {
     expect(routes.filter((route) => operation(route).responses['400'])).toEqual(
-      [routes[0], routes[1], routes[5], routes[6]],
+      [routes[0], routes[1], routes[5], routes[6], routes[7]],
     );
   });
 

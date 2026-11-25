@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import type { Mailer, MailSendOptions } from '@nestjs/mail';
 import type { Env } from '../../core/config/env.schema.js';
+import { AppError } from '../../core/errors/app-error.js';
 import type { UserRow, UsersService } from '../users/index.js';
 import {
   hashPasswordResetToken,
@@ -18,13 +19,20 @@ const row: UserRow = {
   lastName: 'Durand',
   phone: null,
   passwordHash: 'stored-hash',
+  refreshTokensRevokedAt: null,
   createdAt: new Date('2026-11-13T10:00:00Z'),
   updatedAt: new Date('2026-11-13T10:00:00Z'),
 };
 
 function setup() {
-  const users = { findByEmail: vi.fn().mockResolvedValue(row) };
-  const tokens = { replaceForUser: vi.fn().mockResolvedValue(undefined) };
+  const users = {
+    findByEmail: vi.fn().mockResolvedValue(row),
+    resetPassword: vi.fn().mockResolvedValue(true),
+  };
+  const tokens = {
+    replaceForUser: vi.fn().mockResolvedValue(undefined),
+    consume: vi.fn().mockResolvedValue(row.id),
+  };
   const mailer = { send: vi.fn().mockResolvedValue({ attempts: 1 }) };
   const config = { get: vi.fn().mockReturnValue('https://eventhub.test') };
   const service = new PasswordResetService(
@@ -156,5 +164,60 @@ describe('PasswordResetService.request', () => {
 
     await expect(service.request(row.email)).rejects.toBe(error);
     expect(mailer.send).not.toHaveBeenCalled();
+  });
+});
+
+describe('PasswordResetService.reset', () => {
+  const resetError = (service: PasswordResetService) =>
+    service
+      .reset('reset-token', 'nouveaumotdepasse456')
+      .catch((error: unknown) => error);
+
+  const expectInvalidResetToken = (error: unknown) => {
+    expect(error).toBeInstanceOf(AppError);
+    expect(error).toMatchObject({ status: 400, code: 'INVALID_RESET_TOKEN' });
+  };
+
+  it('consumes the hashed token, then changes the password of its user', async () => {
+    const { service, users, tokens } = setup();
+
+    await expect(
+      service.reset('reset-token', 'nouveaumotdepasse456'),
+    ).resolves.toBeUndefined();
+
+    expect(tokens.consume).toHaveBeenCalledWith(
+      hashPasswordResetToken('reset-token'),
+    );
+    expect(users.resetPassword).toHaveBeenCalledWith(
+      row.id,
+      'nouveaumotdepasse456',
+    );
+    expect(tokens.consume.mock.invocationCallOrder[0]).toBeLessThan(
+      users.resetPassword.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('throws 400 INVALID_RESET_TOKEN for an unknown, expired or used token, without changing any password', async () => {
+    const { service, users, tokens } = setup();
+    tokens.consume.mockResolvedValue(null);
+
+    expectInvalidResetToken(await resetError(service));
+    expect(users.resetPassword).not.toHaveBeenCalled();
+  });
+
+  it('throws 400 INVALID_RESET_TOKEN when the user no longer exists', async () => {
+    const { service, users } = setup();
+    users.resetPassword.mockResolvedValue(false);
+
+    expectInvalidResetToken(await resetError(service));
+  });
+
+  it('propagates a database error raised while consuming the token', async () => {
+    const { service, users, tokens } = setup();
+    const error = new Error('connection lost');
+    tokens.consume.mockRejectedValue(error);
+
+    await expect(resetError(service)).resolves.toBe(error);
+    expect(users.resetPassword).not.toHaveBeenCalled();
   });
 });

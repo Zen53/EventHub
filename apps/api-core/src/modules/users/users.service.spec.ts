@@ -12,6 +12,7 @@ const row: UserRow = {
   lastName: 'Durand',
   phone: null,
   passwordHash: 'stored-hash',
+  refreshTokensRevokedAt: null,
   createdAt: new Date('2026-11-13T10:00:00Z'),
   updatedAt: new Date('2026-11-13T10:00:00Z'),
 };
@@ -29,6 +30,7 @@ function setup() {
     findByEmail: vi.fn(),
     findById: vi.fn(),
     update: vi.fn(),
+    updatePassword: vi.fn().mockResolvedValue(true),
   };
   const hasher = {
     hash: vi.fn().mockResolvedValue('hashed'),
@@ -359,5 +361,27 @@ describe('UsersService dummy hash', () => {
       service.verifyCredentials('inconnu@exemple.fr', 'motdepasse123'),
     ).resolves.toBeNull();
     expect(hasher.hash).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('UsersService.resetPassword', () => {
+  it('stores the hash of the new password, never the plain one', async () => {
+    const { service, repository, hasher } = setup();
+
+    await expect(
+      service.resetPassword(row.id, 'nouveaumotdepasse456'),
+    ).resolves.toBe(true);
+
+    expect(hasher.hash).toHaveBeenCalledWith('nouveaumotdepasse456');
+    expect(repository.updatePassword).toHaveBeenCalledWith(row.id, 'hashed');
+  });
+
+  it('returns false when the user no longer exists', async () => {
+    const { service, repository } = setup();
+    repository.updatePassword.mockResolvedValue(false);
+
+    await expect(
+      service.resetPassword(row.id, 'nouveaumotdepasse456'),
+    ).resolves.toBe(false);
   });
 });

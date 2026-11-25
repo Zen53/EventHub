@@ -9,6 +9,7 @@ const row: UserRow = {
   lastName: 'Durand',
   phone: null,
   passwordHash: '$argon2id$secret',
+  refreshTokensRevokedAt: null,
   createdAt: new Date('2026-11-13T10:00:00Z'),
   updatedAt: new Date('2026-11-14T08:30:00Z'),
 };

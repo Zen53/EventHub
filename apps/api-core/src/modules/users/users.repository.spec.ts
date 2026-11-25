@@ -52,6 +52,48 @@ describe('UsersRepository.update', () => {
   });
 });
 
+describe('UsersRepository.updatePassword', () => {
+  const NOW = new Date('2026-11-25T10:00:00Z');
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('stores the new hash and revokes the refresh tokens issued so far, in one statement', async () => {
+    const { repository, db, updateQuery } = setup();
+    updateQuery.returning.mockResolvedValue([{ id: row.id }]);
+
+    await expect(repository.updatePassword(row.id, 'new-hash')).resolves.toBe(
+      true,
+    );
+
+    expect(db.update).toHaveBeenCalledTimes(1);
+    expect(updateQuery.set).toHaveBeenCalledWith({
+      passwordHash: 'new-hash',
+      refreshTokensRevokedAt: NOW,
+    });
+    const [condition] = updateQuery.where.mock.calls[0] as [SQL];
+    expect(render(condition)).toMatchObject({
+      sql: '"users"."id" = $1',
+      params: [row.id],
+    });
+  });
+
+  it('returns false when no user has this id', async () => {
+    const { repository, updateQuery } = setup();
+    updateQuery.returning.mockResolvedValue([]);
+
+    await expect(repository.updatePassword(row.id, 'new-hash')).resolves.toBe(
+      false,
+    );
+  });
+});
+
 describe('isEmailConflict', () => {
   const emailViolation = {
     code: '23505',
