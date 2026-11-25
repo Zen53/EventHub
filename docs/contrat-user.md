@@ -203,7 +203,8 @@ En base, il est stocké haché (bcrypt ou argon2) dans un champ `passwordHash`, 
 
 - `currentPassword` absent alors que `email` est envoyé : `400 VALIDATION_ERROR`
 - `currentPassword` incorrect : `403 WRONG_PASSWORD`
-- `currentPassword` n'est pas exigé pour les autres champs.
+- `currentPassword` n'est pas exigé pour les autres champs, et il est refusé sans `email` (`400 VALIDATION_ERROR`) : le mot de passe ne circule que lorsqu'il sert.
+- Un corps vide `{}` est refusé (`400 VALIDATION_ERROR`) : au moins un champ doit être modifié.
 - Les champs `id`, `createdAt`, `updatedAt` et `password` sont refusés (`400`). Le mot de passe a son propre endpoint.
 - **Réponse `200`** : le `User` complet mis à jour
 - **Erreurs** : `400 VALIDATION_ERROR`, `401 UNAUTHORIZED`, `403 WRONG_PASSWORD`, `409 EMAIL_ALREADY_USED`
