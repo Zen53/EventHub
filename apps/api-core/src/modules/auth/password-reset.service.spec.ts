@@ -75,6 +75,7 @@ describe('PasswordResetService.request', () => {
     expect(mail.to).toBe('camille@exemple.fr');
     expect(mail.subject).toContain('mot de passe');
     expect(mail.text).toContain('Bonjour Camille,');
+    expect(mail.text).toContain('valable 1 heure');
     expect(mail.text).toMatch(
       /https:\/\/eventhub\.test\/reset-password\?token=[\w-]+/,
     );
