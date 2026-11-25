@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { envSchema } from '../../src/core/config/env.schema.js';
+import { envVariablesSchema } from '../../src/core/config/env.schema.js';
 import { events } from '../../src/modules/events/events.schema.js';
 import { PasswordHasher } from '../../src/modules/users/password-hasher.js';
 import { users } from '../../src/modules/users/users.schema.js';
@@ -16,7 +16,7 @@ if (existsSync('.env')) {
   process.loadEnvFile('.env');
 }
 
-const { DATABASE_URL } = envSchema
+const { DATABASE_URL } = envVariablesSchema
   .pick({ DATABASE_URL: true })
   .parse(process.env);
 

@@ -22,6 +22,7 @@ const routes: readonly Route[] = [
   ['post', '/auth/logout'],
   ['get', '/me'],
   ['patch', '/me'],
+  ['post', '/auth/forgot-password'],
 ];
 
 describe('OpenAPI documentation of the auth and /me routes', () => {
@@ -85,6 +86,7 @@ describe('OpenAPI documentation of the auth and /me routes', () => {
     vi.stubEnv('JWT_ACCESS_SECRET', 'test-only-access-secret-of-32-chars!');
     vi.stubEnv('SMTP_URL', 'smtp://localhost:1025');
     vi.stubEnv('MAIL_FROM', 'EventHub <no-reply@eventhub.test>');
+    vi.stubEnv('WEB_URL', 'http://localhost:3000');
     const { AppModule } = await import('../../app.module.js');
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
@@ -105,6 +107,7 @@ describe('OpenAPI documentation of the auth and /me routes', () => {
     [routes[3], ['204']],
     [routes[4], ['200', '401']],
     [routes[5], ['200', '400', '401', '403', '409']],
+    [routes[6], ['204', '400']],
   ] as const)('documents the responses of %j', (route, statuses) => {
     expect(Object.keys(operation(route).responses).sort()).toEqual([
       ...statuses,
@@ -163,6 +166,12 @@ describe('OpenAPI documentation of the auth and /me routes', () => {
 
     expect(noContent.content).toBeUndefined();
     expect(noContent.headers).toHaveProperty('Set-Cookie');
+  });
+
+  it('answers 204 without a body on forgot-password, whatever the email', () => {
+    expect(response(routes[6], '204').content).toBeUndefined();
+    expectErrorResponse(routes[6], '400', 'VALIDATION_ERROR');
+    expect(operation(routes[6]).description).toContain('204');
   });
 
   it('returns the User on GET /me', () => {
@@ -230,13 +239,14 @@ describe('OpenAPI documentation of the auth and /me routes', () => {
     [routes[3], [{ cookie: [] }]],
     [routes[4], undefined],
     [routes[5], undefined],
+    [routes[6], []],
   ] as const)('declares the security of %j', (route, security) => {
     expect(operation(route).security).toEqual(security);
   });
 
   it('documents 400 VALIDATION_ERROR only on routes with a body', () => {
     expect(routes.filter((route) => operation(route).responses['400'])).toEqual(
-      [routes[0], routes[1], routes[5]],
+      [routes[0], routes[1], routes[5], routes[6]],
     );
   });
 

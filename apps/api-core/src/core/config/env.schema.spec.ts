@@ -4,7 +4,14 @@ const DATABASE_URL = 'postgres://user:pass@localhost:5432/db';
 const JWT_ACCESS_SECRET = 'test-only-access-secret-of-32-chars!';
 const SMTP_URL = 'smtp://localhost:1025';
 const MAIL_FROM = 'EventHub <no-reply@eventhub.test>';
-const required = { DATABASE_URL, JWT_ACCESS_SECRET, SMTP_URL, MAIL_FROM };
+const WEB_URL = 'http://localhost:3000';
+const required = {
+  DATABASE_URL,
+  JWT_ACCESS_SECRET,
+  SMTP_URL,
+  MAIL_FROM,
+  WEB_URL,
+};
 
 describe('envSchema', () => {
   it('accepts a valid environment and coerces PORT to a number', () => {
@@ -126,4 +133,51 @@ describe('envSchema', () => {
       expect(envSchema.safeParse({ ...required, ...env }).success).toBe(false);
     },
   );
+
+  it.each([{}, { NODE_ENV: 'development' }])(
+    'falls back to http://localhost:3000 without WEB_URL in development (%o)',
+    (env) => {
+      expect(
+        envSchema.parse({ ...required, ...env, WEB_URL: undefined }).WEB_URL,
+      ).toBe('http://localhost:3000');
+    },
+  );
+
+  it('keeps the WEB_URL given in development', () => {
+    expect(
+      envSchema.parse({ ...required, WEB_URL: 'http://localhost:4000' })
+        .WEB_URL,
+    ).toBe('http://localhost:4000');
+  });
+
+  it.each(['production', 'test'])(
+    'rejects a missing WEB_URL when NODE_ENV is %s',
+    (NODE_ENV) => {
+      const result = envSchema.safeParse({
+        ...required,
+        NODE_ENV,
+        WEB_URL: undefined,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0]?.path).toEqual(['WEB_URL']);
+    },
+  );
+
+  it.each([
+    { WEB_URL: '' },
+    { WEB_URL: 'localhost:3000' },
+    { WEB_URL: 'ftp://eventhub.example.com' },
+  ])('rejects the front URL in %o', (env) => {
+    expect(envSchema.safeParse({ ...required, ...env }).success).toBe(false);
+  });
+
+  it('accepts an https front URL', () => {
+    expect(
+      envSchema.safeParse({
+        ...required,
+        WEB_URL: 'https://eventhub.example.com',
+      }).success,
+    ).toBe(true);
+  });
 });
