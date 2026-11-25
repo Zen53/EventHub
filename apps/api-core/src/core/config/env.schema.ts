@@ -12,6 +12,9 @@ export const envSchema = z.object({
     .refine((secret) => !secret.startsWith('change-me'), {
       message: 'Replace the placeholder with a random secret',
     }),
+  SMTP_URL: z.url({ protocol: /^smtps?$/ }),
+  SMTP_STARTTLS: z.enum(['required', 'opportunistic', 'never']).optional(),
+  MAIL_FROM: z.string().trim().min(1),
 });
 
 export type Env = z.infer<typeof envSchema>;

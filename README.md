@@ -34,10 +34,11 @@ Prérequis : Docker avec Compose.
 docker compose up --build
 ```
 
-Compose démarre PostgreSQL, applique les migrations, charge les données de démo, puis lance l'API et le front.
+Compose démarre PostgreSQL et Mailpit, applique les migrations, charge les données de démo, puis lance l'API et le front.
 
 - Front : http://localhost:3000
 - API : http://localhost:3001 (documentation OpenAPI sur http://localhost:3001/docs)
+- Emails : http://localhost:8052 (Mailpit capture les emails envoyés par l'API, aucun ne part vers l'extérieur)
 
 Pour repartir d'une base vide :
 
@@ -47,7 +48,7 @@ docker compose down -v
 
 ## Lancer le projet en local
 
-Prérequis : Node 22.12 ou plus récent (24 recommandé), pnpm 12 et un PostgreSQL local.
+Prérequis : Node 22.12 ou plus récent (24 recommandé), pnpm 12, un PostgreSQL local et Docker pour Mailpit.
 
 ### 1. Installer
 
@@ -68,6 +69,14 @@ Dans `apps/api-core/.env`, renseigner `DATABASE_URL` avec l'URL de votre base Po
 ```bash
 openssl rand -base64 48
 ```
+
+`SMTP_URL` et `MAIL_FROM` sont déjà réglés pour Mailpit, qui capture les emails envoyés par l'API. Pour le lancer seul :
+
+```bash
+docker compose up -d mailpit
+```
+
+Les emails s'affichent sur http://localhost:8052.
 
 L'API refuse de démarrer si une variable manque ou est invalide.
 

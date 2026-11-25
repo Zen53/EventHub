@@ -35,6 +35,8 @@ Requires Node 22.12+ (24 recommended) and pnpm 12. The repo is a pnpm workspace:
 Copy `.env.example` to `.env` (`cp .env.example .env`), then run `pnpm start:api` from the root (or `pnpm start:dev` here).
 The app refuses to start when a variable of `src/core/config/env.schema.ts` is missing or invalid.
 
+Emails go through `@nestjs/mail` over SMTP (`src/core/mail`): inject `Mailer` in any module to send one. In development, Mailpit captures them: `docker compose up -d mailpit` from the root, then read them on http://localhost:8052.
+
 ## Compile and run the project
 
 Local database: set `DATABASE_URL` in `.env` to your local Postgres, then, once `drizzle/` holds migrations (`pnpm db:generate`), run `pnpm db:migrate`.

@@ -86,6 +86,8 @@ describe('ApiEndpoint', () => {
   beforeAll(async () => {
     vi.stubEnv('DATABASE_URL', 'postgres://user:pass@localhost:5432/db');
     vi.stubEnv('JWT_ACCESS_SECRET', 'test-only-access-secret-of-32-chars!');
+    vi.stubEnv('SMTP_URL', 'smtp://localhost:1025');
+    vi.stubEnv('MAIL_FROM', 'EventHub <no-reply@eventhub.test>');
     const { CoreModule } = await import('../core.module.js');
     const moduleRef = await Test.createTestingModule({
       imports: [CoreModule],
