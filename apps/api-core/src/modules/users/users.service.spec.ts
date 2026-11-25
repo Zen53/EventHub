@@ -1,3 +1,4 @@
+import type { UpdateMeBody } from '@eventhub/schemas';
 import { AppError } from '../../core/errors/app-error.js';
 import type { PasswordHasher } from './password-hasher.js';
 import type { UsersRepository } from './users.repository.js';
@@ -27,6 +28,7 @@ function setup() {
     insert: vi.fn().mockResolvedValue(row),
     findByEmail: vi.fn(),
     findById: vi.fn(),
+    update: vi.fn(),
   };
   const hasher = {
     hash: vi.fn().mockResolvedValue('hashed'),
@@ -107,6 +109,168 @@ describe('UsersService.findById', () => {
 
     await expect(service.findById(row.id)).resolves.toBe(row);
     expect(repository.findById).toHaveBeenCalledWith(row.id);
+  });
+});
+
+describe('UsersService.updateProfile', () => {
+  const updated: UserRow = { ...row, firstName: 'Camille-Marie' };
+
+  function setupUpdate() {
+    const context = setup();
+    context.repository.findById.mockResolvedValue(row);
+    context.repository.update.mockResolvedValue(updated);
+    return context;
+  }
+
+  it('updates only the sent fields, without reading the user nor checking the password', async () => {
+    const { service, repository, hasher } = setupUpdate();
+
+    await expect(
+      service.updateProfile(row.id, {
+        firstName: 'Camille-Marie',
+        phone: null,
+      }),
+    ).resolves.toBe(updated);
+
+    expect(repository.update).toHaveBeenCalledWith(row.id, {
+      firstName: 'Camille-Marie',
+      phone: null,
+    });
+    expect(repository.findById).not.toHaveBeenCalled();
+    expect(hasher.verify).not.toHaveBeenCalled();
+  });
+
+  it('passes only the profile fields to the repository', async () => {
+    const { service, repository } = setupUpdate();
+    const body = {
+      lastName: 'Martin',
+      id: 'another-id',
+      passwordHash: 'injected',
+      createdAt: new Date(0),
+    } as UpdateMeBody;
+
+    await service.updateProfile(row.id, body);
+
+    expect(repository.update).toHaveBeenCalledWith(row.id, {
+      lastName: 'Martin',
+    });
+  });
+
+  it('returns the user unchanged, without writing, when there is nothing to update', async () => {
+    const { service, repository } = setupUpdate();
+
+    await expect(service.updateProfile(row.id, {})).resolves.toBe(row);
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it('throws 401 UNAUTHORIZED when there is nothing to update and the user no longer exists', async () => {
+    const { service, repository } = setupUpdate();
+    repository.findById.mockResolvedValue(null);
+
+    await expect(service.updateProfile(row.id, {})).rejects.toMatchObject({
+      status: 401,
+      code: 'UNAUTHORIZED',
+    });
+  });
+
+  it('changes the email after checking the current password, and never stores the password', async () => {
+    const { service, repository, hasher } = setupUpdate();
+    hasher.verify.mockResolvedValue(true);
+
+    await service.updateProfile(row.id, {
+      email: ' Camille.Durand@Exemple.FR ',
+      currentPassword: 'motdepasse123',
+    });
+
+    expect(hasher.verify).toHaveBeenCalledWith('stored-hash', 'motdepasse123');
+    expect(repository.update).toHaveBeenCalledWith(row.id, {
+      email: 'camille.durand@exemple.fr',
+    });
+    expect(hasher.verify.mock.invocationCallOrder[0]).toBeLessThan(
+      repository.update.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('throws 403 WRONG_PASSWORD and changes nothing when the password is wrong', async () => {
+    const { service, repository, hasher } = setupUpdate();
+    hasher.verify.mockResolvedValue(false);
+
+    const promise = service.updateProfile(row.id, {
+      email: 'camille.durand@exemple.fr',
+      firstName: 'Camille-Marie',
+      currentPassword: 'mauvais123',
+    });
+
+    await expect(promise).rejects.toBeInstanceOf(AppError);
+    await expect(promise).rejects.toMatchObject({
+      status: 403,
+      code: 'WRONG_PASSWORD',
+    });
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it('throws 403 WRONG_PASSWORD when the email comes without a password', async () => {
+    const { service, repository, hasher } = setupUpdate();
+
+    await expect(
+      service.updateProfile(row.id, { email: 'camille.durand@exemple.fr' }),
+    ).rejects.toMatchObject({ code: 'WRONG_PASSWORD' });
+    expect(hasher.verify).not.toHaveBeenCalled();
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it('throws 409 EMAIL_ALREADY_USED when the email belongs to another account', async () => {
+    const { service, repository, hasher } = setupUpdate();
+    hasher.verify.mockResolvedValue(true);
+    repository.update.mockRejectedValue(
+      new Error('Failed query', {
+        cause: { code: '23505', constraint_name: 'users_email_unique' },
+      }),
+    );
+
+    const promise = service.updateProfile(row.id, {
+      email: 'pris@exemple.fr',
+      currentPassword: 'motdepasse123',
+    });
+
+    await expect(promise).rejects.toBeInstanceOf(AppError);
+    await expect(promise).rejects.toMatchObject({
+      status: 409,
+      code: 'EMAIL_ALREADY_USED',
+    });
+  });
+
+  it('rethrows any other error as is', async () => {
+    const { service, repository } = setupUpdate();
+    const error = new Error('boom');
+    repository.update.mockRejectedValue(error);
+
+    await expect(
+      service.updateProfile(row.id, { lastName: 'Martin' }),
+    ).rejects.toBe(error);
+  });
+
+  it('throws 401 UNAUTHORIZED before checking the password when the user no longer exists', async () => {
+    const { service, repository, hasher } = setupUpdate();
+    repository.findById.mockResolvedValue(null);
+
+    await expect(
+      service.updateProfile(row.id, {
+        email: 'camille.durand@exemple.fr',
+        currentPassword: 'motdepasse123',
+      }),
+    ).rejects.toMatchObject({ status: 401, code: 'UNAUTHORIZED' });
+    expect(hasher.verify).not.toHaveBeenCalled();
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it('throws 401 UNAUTHORIZED when the user is deleted during the update', async () => {
+    const { service, repository } = setupUpdate();
+    repository.update.mockResolvedValue(null);
+
+    await expect(
+      service.updateProfile(row.id, { lastName: 'Martin' }),
+    ).rejects.toMatchObject({ status: 401, code: 'UNAUTHORIZED' });
   });
 });
 

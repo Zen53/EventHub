@@ -10,6 +10,7 @@ export const errorCatalog = {
     message: 'Invalid or expired refresh token',
   },
   FORBIDDEN: { status: 403, message: 'Forbidden' },
+  WRONG_PASSWORD: { status: 403, message: 'Wrong current password' },
   NOT_FOUND: { status: 404, message: 'Not found' },
   EVENT_NOT_FOUND: { status: 404, message: 'Event not found' },
   EMAIL_ALREADY_USED: { status: 409, message: 'Email already used' },
