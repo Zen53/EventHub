@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import type { LoginBody, RegisterBody } from '@eventhub/schemas';
+import type {
+  ChangePasswordBody,
+  LoginBody,
+  RegisterBody,
+} from '@eventhub/schemas';
 import { AppError } from '../../core/errors/app-error.js';
 import { AccessTokenService } from '../../core/security/index.js';
 import { type UserRow, UsersService } from '../users/index.js';
@@ -35,8 +39,20 @@ export class AuthService {
       throw new AppError('INVALID_CREDENTIALS');
     }
     const accessToken = this.accessTokens.sign({ userId: user.id });
-    const refreshToken = this.refreshTokens.issue(user.id);
+    const refreshToken = this.refreshTokens.issue(user.id, user.tokenVersion);
     return { accessToken, refreshToken, user };
+  }
+
+  /**
+   * Change le mot de passe : toutes les sessions sont invalidées, et la session
+   * en cours reçoit un nouveau refresh token pour rester connectée.
+   */
+  async changePassword(
+    userId: string,
+    body: ChangePasswordBody,
+  ): Promise<IssuedRefreshToken> {
+    const user = await this.users.changePassword(userId, body);
+    return this.refreshTokens.issue(user.id, user.tokenVersion);
   }
 
   async logout(token: string | undefined): Promise<void> {
@@ -65,11 +81,12 @@ export class AuthService {
       throw invalidRefreshToken();
     }
     const user = await this.users.findById(verified.userId);
-    if (!user) {
+    // Version différente : les sessions ont été invalidées depuis l'émission (EV-95).
+    if (!user || user.tokenVersion !== verified.tokenVersion) {
       throw invalidRefreshToken();
     }
     const accessToken = this.accessTokens.sign({ userId: user.id });
-    const refreshToken = this.refreshTokens.issue(user.id);
+    const refreshToken = this.refreshTokens.issue(user.id, user.tokenVersion);
     return { accessToken, refreshToken };
   }
 }

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { type Database, InjectDatabase } from '../../core/database/index.js';
 import { type NewUserRow, type UserRow, users } from './users.schema.js';
 
@@ -68,4 +68,30 @@ export class UsersRepository {
       .returning();
     return row ?? null;
   }
+
+  /** Invalide toutes les sessions de l'utilisateur, et renvoie la nouvelle version. */
+  async incrementTokenVersion(id: string): Promise<number | null> {
+    const [row] = await this.db
+      .update(users)
+      .set({ tokenVersion: nextTokenVersion })
+      .where(eq(users.id, id))
+      .returning({ tokenVersion: users.tokenVersion });
+    return row?.tokenVersion ?? null;
+  }
+
+  /** Change le mot de passe et invalide toutes les sessions, en une seule écriture. */
+  async updatePassword(
+    id: string,
+    passwordHash: string,
+  ): Promise<UserRow | null> {
+    const [row] = await this.db
+      .update(users)
+      .set({ passwordHash, tokenVersion: nextTokenVersion })
+      .where(eq(users.id, id))
+      .returning();
+    return row ?? null;
+  }
 }
+
+// Incrément atomique côté base : deux révocations simultanées ne se perdent pas.
+const nextTokenVersion = sql`${users.tokenVersion} + 1`;

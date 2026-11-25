@@ -26,15 +26,8 @@ import {
   clearRefreshTokenCookie,
   REFRESH_TOKEN_COOKIE,
   setRefreshTokenCookie,
+  setRefreshTokenCookieHeader,
 } from './refresh-token.cookie.js';
-
-const setRefreshTokenCookieHeader = {
-  'Set-Cookie': {
-    description:
-      'Nouveau refresh token dans le cookie `refreshToken` (`HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/auth`, 7 jours).',
-    schema: { type: 'string' as const },
-  },
-};
 
 const clearRefreshTokenCookieHeader = {
   'Set-Cookie': {

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { UpdateMeBody } from '@eventhub/schemas';
+import type { ChangePasswordBody, UpdateMeBody } from '@eventhub/schemas';
 import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { AppError } from '../../core/errors/app-error.js';
 import { PasswordHasher } from './password-hasher.js';
@@ -82,6 +82,31 @@ export class UsersService implements OnModuleInit {
       throw new AppError('UNAUTHORIZED');
     }
     return row;
+  }
+
+  /**
+   * Change le mot de passe après vérification de l'actuel. Toutes les sessions
+   * sont invalidées : la ligne renvoyée porte la nouvelle `tokenVersion`.
+   */
+  async changePassword(
+    id: string,
+    { currentPassword, newPassword }: ChangePasswordBody,
+  ): Promise<UserRow> {
+    await this.verifyCurrentPassword(id, currentPassword);
+    const passwordHash = await this.hasher.hash(newPassword);
+    const row = await this.repository.updatePassword(id, passwordHash);
+    if (!row) {
+      throw new AppError('UNAUTHORIZED');
+    }
+    return row;
+  }
+
+  /**
+   * Invalide tous les refresh tokens de l'utilisateur (EV-95), en incrémentant
+   * sa `tokenVersion`. Renvoie la nouvelle version, ou `null` si l'utilisateur n'existe pas.
+   */
+  revokeAllSessions(id: string): Promise<number | null> {
+    return this.repository.incrementTokenVersion(id);
   }
 
   async verifyCredentials(

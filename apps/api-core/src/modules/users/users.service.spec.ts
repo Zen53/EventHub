@@ -12,6 +12,7 @@ const row: UserRow = {
   lastName: 'Durand',
   phone: null,
   passwordHash: 'stored-hash',
+  tokenVersion: 0,
   createdAt: new Date('2026-11-13T10:00:00Z'),
   updatedAt: new Date('2026-11-13T10:00:00Z'),
 };
@@ -29,6 +30,8 @@ function setup() {
     findByEmail: vi.fn(),
     findById: vi.fn(),
     update: vi.fn(),
+    updatePassword: vi.fn(),
+    incrementTokenVersion: vi.fn(),
   };
   const hasher = {
     hash: vi.fn().mockResolvedValue('hashed'),
@@ -271,6 +274,100 @@ describe('UsersService.updateProfile', () => {
     await expect(
       service.updateProfile(row.id, { lastName: 'Martin' }),
     ).rejects.toMatchObject({ status: 401, code: 'UNAUTHORIZED' });
+  });
+});
+
+describe('UsersService.changePassword', () => {
+  const changed: UserRow = { ...row, passwordHash: 'hashed', tokenVersion: 1 };
+  const body = {
+    currentPassword: 'motdepasse123',
+    newPassword: 'nouveaumotdepasse456',
+  };
+
+  function setupChange() {
+    const context = setup();
+    context.repository.findById.mockResolvedValue(row);
+    context.hasher.verify.mockResolvedValue(true);
+    context.repository.updatePassword.mockResolvedValue(changed);
+    return context;
+  }
+
+  it('checks the current password, stores the hash of the new one and returns the row with its new token version', async () => {
+    const { service, repository, hasher } = setupChange();
+
+    await expect(service.changePassword(row.id, body)).resolves.toBe(changed);
+
+    expect(hasher.verify).toHaveBeenCalledWith('stored-hash', 'motdepasse123');
+    expect(hasher.hash).toHaveBeenCalledWith('nouveaumotdepasse456');
+    expect(repository.updatePassword).toHaveBeenCalledWith(row.id, 'hashed');
+    expect(hasher.verify.mock.invocationCallOrder[0]).toBeLessThan(
+      repository.updatePassword.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('throws 403 WRONG_PASSWORD and changes nothing when the current password is wrong', async () => {
+    const { service, repository, hasher } = setupChange();
+    hasher.verify.mockResolvedValue(false);
+
+    const promise = service.changePassword(row.id, {
+      ...body,
+      currentPassword: 'mauvais123',
+    });
+
+    await expect(promise).rejects.toBeInstanceOf(AppError);
+    await expect(promise).rejects.toMatchObject({
+      status: 403,
+      code: 'WRONG_PASSWORD',
+    });
+    expect(hasher.hash).not.toHaveBeenCalled();
+    expect(repository.updatePassword).not.toHaveBeenCalled();
+  });
+
+  it('throws 401 UNAUTHORIZED before checking the password when the user no longer exists', async () => {
+    const { service, repository, hasher } = setupChange();
+    repository.findById.mockResolvedValue(null);
+
+    await expect(service.changePassword(row.id, body)).rejects.toMatchObject({
+      status: 401,
+      code: 'UNAUTHORIZED',
+    });
+    expect(hasher.verify).not.toHaveBeenCalled();
+    expect(repository.updatePassword).not.toHaveBeenCalled();
+  });
+
+  it('throws 401 UNAUTHORIZED when the user is deleted during the change', async () => {
+    const { service, repository } = setupChange();
+    repository.updatePassword.mockResolvedValue(null);
+
+    await expect(service.changePassword(row.id, body)).rejects.toMatchObject({
+      status: 401,
+      code: 'UNAUTHORIZED',
+    });
+  });
+
+  it('rethrows a database error as is', async () => {
+    const { service, repository } = setupChange();
+    const error = new Error('connection refused');
+    repository.updatePassword.mockRejectedValue(error);
+
+    await expect(service.changePassword(row.id, body)).rejects.toBe(error);
+  });
+});
+
+describe('UsersService.revokeAllSessions', () => {
+  it('increments the token version and returns the new one', async () => {
+    const { service, repository } = setup();
+    repository.incrementTokenVersion.mockResolvedValue(4);
+
+    await expect(service.revokeAllSessions(row.id)).resolves.toBe(4);
+    expect(repository.incrementTokenVersion).toHaveBeenCalledWith(row.id);
+  });
+
+  it('returns null when the user no longer exists', async () => {
+    const { service, repository } = setup();
+    repository.incrementTokenVersion.mockResolvedValue(null);
+
+    await expect(service.revokeAllSessions(row.id)).resolves.toBeNull();
   });
 });
 

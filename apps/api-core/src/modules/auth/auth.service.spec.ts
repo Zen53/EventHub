@@ -11,6 +11,7 @@ const row: UserRow = {
   lastName: 'Durand',
   phone: null,
   passwordHash: 'stored-hash',
+  tokenVersion: 0,
   createdAt: new Date('2026-11-13T10:00:00Z'),
   updatedAt: new Date('2026-11-13T10:00:00Z'),
 };
@@ -34,6 +35,7 @@ const verified = {
   userId: row.id,
   jti: issued.jti,
   expiresAt: issued.expiresAt,
+  tokenVersion: 0,
 };
 
 const invalidRefreshToken = () => new AppError('INVALID_REFRESH_TOKEN');
@@ -43,6 +45,7 @@ function setup() {
     create: vi.fn().mockResolvedValue(row),
     verifyCredentials: vi.fn().mockResolvedValue(row),
     findById: vi.fn().mockResolvedValue(row),
+    changePassword: vi.fn(),
   };
   const accessTokens = { sign: vi.fn().mockReturnValue('signed-access-token') };
   const refreshTokens = {
@@ -89,7 +92,7 @@ describe('AuthService.login', () => {
       'motdepasse123',
     );
     expect(accessTokens.sign).toHaveBeenCalledWith({ userId: row.id });
-    expect(refreshTokens.issue).toHaveBeenCalledWith(row.id);
+    expect(refreshTokens.issue).toHaveBeenCalledWith(row.id, 0);
   });
 
   const loginError = (service: AuthService, email: string, password: string) =>
@@ -146,11 +149,7 @@ describe('AuthService.logout', () => {
       service.logout('signed-refresh-token'),
     ).resolves.toBeUndefined();
     expect(refreshTokens.verify).toHaveBeenCalledWith('signed-refresh-token');
-    expect(refreshTokens.revoke).toHaveBeenCalledWith({
-      userId: row.id,
-      jti: issued.jti,
-      expiresAt: issued.expiresAt,
-    });
+    expect(refreshTokens.revoke).toHaveBeenCalledWith(verified);
   });
 
   it('succeeds without revoking an invalid or expired token', async () => {
@@ -275,6 +274,28 @@ describe('AuthService.refresh', () => {
     expect(accessTokens.sign).not.toHaveBeenCalled();
   });
 
+  it('throws 401 INVALID_REFRESH_TOKEN when the sessions were revoked since the token was issued', async () => {
+    const { service, users, refreshTokens, accessTokens } = setup();
+    users.findById.mockResolvedValue({ ...row, tokenVersion: 1 });
+
+    expectInvalidRefreshToken(
+      await refreshError(service, 'signed-refresh-token'),
+    );
+    expect(refreshTokens.revoke).toHaveBeenCalledWith(verified);
+    expect(refreshTokens.issue).not.toHaveBeenCalled();
+    expect(accessTokens.sign).not.toHaveBeenCalled();
+  });
+
+  it('issues the new refresh token with the current token version of the user', async () => {
+    const { service, users, refreshTokens } = setup();
+    refreshTokens.verify.mockResolvedValue({ ...verified, tokenVersion: 3 });
+    users.findById.mockResolvedValue({ ...row, tokenVersion: 3 });
+
+    await service.refresh('signed-refresh-token');
+
+    expect(refreshTokens.issue).toHaveBeenCalledWith(row.id, 3);
+  });
+
   it('revokes the old token before issuing a new access token and a new refresh token', async () => {
     const { service, users, refreshTokens, accessTokens } = setup();
     refreshTokens.issue.mockReturnValue(rotated);
@@ -290,7 +311,7 @@ describe('AuthService.refresh', () => {
     expect(refreshTokens.revoke).toHaveBeenCalledWith(verified);
     expect(users.findById).toHaveBeenCalledWith(row.id);
     expect(accessTokens.sign).toHaveBeenCalledWith({ userId: row.id });
-    expect(refreshTokens.issue).toHaveBeenCalledWith(row.id);
+    expect(refreshTokens.issue).toHaveBeenCalledWith(row.id, 0);
     const [revokeOrder] = refreshTokens.revoke.mock.invocationCallOrder;
     const [findOrder] = users.findById.mock.invocationCallOrder;
     const [issueOrder] = refreshTokens.issue.mock.invocationCallOrder;
@@ -316,6 +337,36 @@ describe('AuthService.refresh', () => {
     users.findById.mockRejectedValue(error);
 
     await expect(service.refresh('signed-refresh-token')).rejects.toBe(error);
+    expect(refreshTokens.issue).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthService.changePassword', () => {
+  const body = {
+    currentPassword: 'motdepasse123',
+    newPassword: 'nouveaumotdepasse456',
+  };
+
+  it('changes the password, then issues a refresh token with the new token version for the current session', async () => {
+    const { service, users, refreshTokens, accessTokens } = setup();
+    users.changePassword.mockResolvedValue({ ...row, tokenVersion: 1 });
+
+    await expect(service.changePassword(row.id, body)).resolves.toBe(issued);
+
+    expect(users.changePassword).toHaveBeenCalledWith(row.id, body);
+    expect(refreshTokens.issue).toHaveBeenCalledWith(row.id, 1);
+    expect(users.changePassword.mock.invocationCallOrder[0]).toBeLessThan(
+      refreshTokens.issue.mock.invocationCallOrder[0],
+    );
+    expect(accessTokens.sign).not.toHaveBeenCalled();
+  });
+
+  it('propagates 403 WRONG_PASSWORD without issuing a refresh token', async () => {
+    const { service, users, refreshTokens } = setup();
+    const error = new AppError('WRONG_PASSWORD');
+    users.changePassword.mockRejectedValue(error);
+
+    await expect(service.changePassword(row.id, body)).rejects.toBe(error);
     expect(refreshTokens.issue).not.toHaveBeenCalled();
   });
 });

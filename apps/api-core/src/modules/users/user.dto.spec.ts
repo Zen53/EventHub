@@ -9,6 +9,7 @@ const row: UserRow = {
   lastName: 'Durand',
   phone: null,
   passwordHash: '$argon2id$secret',
+  tokenVersion: 0,
   createdAt: new Date('2026-11-13T10:00:00Z'),
   updatedAt: new Date('2026-11-14T08:30:00Z'),
 };
@@ -27,6 +28,7 @@ describe('toUserResponse', () => {
       updatedAt: '2026-11-14T08:30:00.000Z',
     });
     expect(user).not.toHaveProperty('passwordHash');
+    expect(user).not.toHaveProperty('tokenVersion');
     expect(JSON.stringify(user)).not.toContain('argon2');
     expect(userSchema.safeParse(user).success).toBe(true);
   });

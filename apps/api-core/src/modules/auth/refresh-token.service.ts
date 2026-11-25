@@ -21,6 +21,8 @@ export interface VerifiedRefreshToken {
   userId: string;
   jti: string;
   expiresAt: Date;
+  /** `tokenVersion` de l'utilisateur à l'émission : le token ne vaut plus rien si elle a changé depuis. */
+  tokenVersion: number;
 }
 
 @Injectable()
@@ -49,15 +51,15 @@ export class RefreshTokenService {
     });
   }
 
-  issue(userId: string): IssuedRefreshToken {
+  issue(userId: string, tokenVersion: number): IssuedRefreshToken {
     const jti = randomUUID();
-    const token = this.signer.sign({ sub: userId, jti });
+    const token = this.signer.sign({ sub: userId, jti, ver: tokenVersion });
     const { exp } = decodePayload(token);
     return { token, jti, expiresAt: new Date(exp * 1000) };
   }
 
   async verify(token: string): Promise<VerifiedRefreshToken> {
-    let claims: { sub?: unknown; jti?: unknown; exp?: unknown };
+    let claims: { sub?: unknown; jti?: unknown; exp?: unknown; ver?: unknown };
     try {
       claims = await this.verifier.verify(token);
     } catch (error) {
@@ -66,17 +68,24 @@ export class RefreshTokenService {
       }
       throw error;
     }
-    const { sub, jti, exp } = claims;
+    const { sub, jti, exp, ver } = claims;
     if (
       typeof sub !== 'string' ||
       sub === '' ||
       typeof jti !== 'string' ||
       jti === '' ||
-      typeof exp !== 'number'
+      typeof exp !== 'number' ||
+      !Number.isSafeInteger(ver) ||
+      (ver as number) < 0
     ) {
       throw invalidRefreshToken();
     }
-    return { userId: sub, jti, expiresAt: new Date(exp * 1000) };
+    return {
+      userId: sub,
+      jti,
+      expiresAt: new Date(exp * 1000),
+      tokenVersion: ver as number,
+    };
   }
 
   revoke({ jti, expiresAt }: VerifiedRefreshToken): Promise<boolean> {

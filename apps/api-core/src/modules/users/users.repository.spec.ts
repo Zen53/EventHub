@@ -52,6 +52,64 @@ describe('UsersRepository.update', () => {
   });
 });
 
+describe('UsersRepository.incrementTokenVersion', () => {
+  it('increments token_version in the database and returns the new version', async () => {
+    const { repository, db, updateQuery } = setup();
+    updateQuery.returning.mockResolvedValue([{ tokenVersion: 3 }]);
+
+    await expect(repository.incrementTokenVersion(row.id)).resolves.toBe(3);
+
+    expect(db.update).toHaveBeenCalledWith(users);
+    const [{ tokenVersion }] = updateQuery.set.mock.calls[0] as [
+      { tokenVersion: SQL },
+    ];
+    expect(render(tokenVersion).sql).toBe('"users"."token_version" + 1');
+    const [condition] = updateQuery.where.mock.calls[0] as [SQL];
+    expect(render(condition)).toMatchObject({
+      sql: '"users"."id" = $1',
+      params: [row.id],
+    });
+  });
+
+  it('returns null when no user has this id', async () => {
+    const { repository, updateQuery } = setup();
+    updateQuery.returning.mockResolvedValue([]);
+
+    await expect(repository.incrementTokenVersion(row.id)).resolves.toBeNull();
+  });
+});
+
+describe('UsersRepository.updatePassword', () => {
+  it('sets the new hash and increments token_version in the same update', async () => {
+    const { repository, db, updateQuery } = setup();
+
+    await expect(repository.updatePassword(row.id, 'new-hash')).resolves.toBe(
+      row,
+    );
+
+    expect(db.update).toHaveBeenCalledOnce();
+    const [{ passwordHash, tokenVersion }] = updateQuery.set.mock.calls[0] as [
+      { passwordHash: string; tokenVersion: SQL },
+    ];
+    expect(passwordHash).toBe('new-hash');
+    expect(render(tokenVersion).sql).toBe('"users"."token_version" + 1');
+    const [condition] = updateQuery.where.mock.calls[0] as [SQL];
+    expect(render(condition)).toMatchObject({
+      sql: '"users"."id" = $1',
+      params: [row.id],
+    });
+  });
+
+  it('returns null when no user has this id', async () => {
+    const { repository, updateQuery } = setup();
+    updateQuery.returning.mockResolvedValue([]);
+
+    await expect(
+      repository.updatePassword(row.id, 'new-hash'),
+    ).resolves.toBeNull();
+  });
+});
+
 describe('isEmailConflict', () => {
   const emailViolation = {
     code: '23505',

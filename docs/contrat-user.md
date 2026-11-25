@@ -52,6 +52,7 @@ En base, il est stocké haché (bcrypt ou argon2) dans un champ `passwordHash`, 
 - Le front et le back sont servis sur le **même domaine**. Le navigateur envoie donc le cookie tout seul sur les appels à `/auth/*` : pas de configuration CORS, et `SameSite=Strict` fonctionne.
 - Quand l'access token expire, l'API répond `401 UNAUTHORIZED`. Le front appelle alors `POST /auth/refresh`, puis rejoue la requête.
 - À chaque refresh, le back émet un **nouveau** refresh token et invalide l'ancien (rotation).
+- **Invalider toutes les sessions** d'un utilisateur (changement ou réinitialisation du mot de passe, suppression du compte) : chaque utilisateur a une `tokenVersion`, recopiée dans ses refresh tokens. L'incrémenter rend tous ses refresh tokens refusés au prochain `POST /auth/refresh`. Côté back, c'est `UsersService.revokeAllSessions(userId)`.
 
 ## Endpoints d'authentification
 
@@ -221,7 +222,8 @@ En base, il est stocké haché (bcrypt ou argon2) dans un champ `passwordHash`, 
 }
 ```
 
-- **Réponse `204`** : sans corps. Tous les refresh tokens de l'utilisateur sont invalidés, sauf celui de la session en cours.
+- **Réponse `204`** : sans corps. Tous les refresh tokens de l'utilisateur sont invalidés, y compris celui de la session en cours, qui reçoit un **nouveau refresh token en cookie** et reste donc connectée. Les autres appareils sont déconnectés à l'expiration de leur access token (15 minutes au plus).
+- Les règles du nouveau mot de passe sont celles de l'inscription. L'ancien n'a pas à les respecter (il est seulement comparé au mot de passe enregistré).
 - **Erreurs** : `400 VALIDATION_ERROR`, `401 UNAUTHORIZED`, `403 WRONG_PASSWORD`
 
 ### `DELETE /me` : supprimer mon compte (sprint 2)

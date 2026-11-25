@@ -26,3 +26,12 @@ export function setRefreshTokenCookie(response: Response, token: string): void {
 export function clearRefreshTokenCookie(response: Response): void {
   response.clearCookie(REFRESH_TOKEN_COOKIE, { ...refreshTokenCookieScope });
 }
+
+/** En-tête `Set-Cookie` documenté dans OpenAPI par les routes qui posent un nouveau refresh token. */
+export const setRefreshTokenCookieHeader = {
+  'Set-Cookie': {
+    description:
+      'Nouveau refresh token dans le cookie `refreshToken` (`HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/auth`, 7 jours).',
+    schema: { type: 'string' as const },
+  },
+};

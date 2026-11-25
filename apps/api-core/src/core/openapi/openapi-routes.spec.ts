@@ -255,6 +255,49 @@ describe('OpenAPI documentation of the auth and /me routes', () => {
     expect(examples[code]?.value.error.code).toBe(code);
   });
 
+  describe('PATCH /me/password', () => {
+    const changePassword: Route = ['patch', '/me/password'];
+
+    it('documents 204, 400, 401 and 403 under the Users tag, behind the bearer token', () => {
+      const { summary, tags, security, responses } = operation(changePassword);
+
+      expect(summary).toBeTruthy();
+      expect(tags).toEqual(['Users']);
+      expect(security).toBeUndefined();
+      expect(Object.keys(responses).sort()).toEqual([
+        '204',
+        '400',
+        '401',
+        '403',
+      ]);
+    });
+
+    it('answers 204 without a body and sets the new refresh cookie', () => {
+      const noContent = response(changePassword, '204');
+
+      expect(noContent.content).toBeUndefined();
+      expect(noContent.headers).toHaveProperty('Set-Cookie');
+    });
+
+    it('documents the body with both passwords required', () => {
+      const body = operation(changePassword).requestBody;
+      if (!body || !('content' in body)) {
+        throw new Error('No request body for PATCH /me/password');
+      }
+      const schema = resolve(body.content['application/json']?.schema);
+
+      expect(propertiesOf(schema)).toEqual(['currentPassword', 'newPassword']);
+      expect(schema?.required).toEqual(['currentPassword', 'newPassword']);
+      expect(schema?.additionalProperties).toBe(false);
+    });
+
+    it('documents its errors with examples', () => {
+      expectErrorResponse(changePassword, '400', 'VALIDATION_ERROR');
+      expectErrorResponse(changePassword, '401', 'UNAUTHORIZED');
+      expectErrorResponse(changePassword, '403', 'WRONG_PASSWORD');
+    });
+  });
+
   it('removes the error codes extension from the document', () => {
     expect(JSON.stringify(document)).not.toContain('x-error-codes');
   });
