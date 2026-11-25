@@ -1,13 +1,22 @@
-import { passwordResetMail } from './password-reset.mail.js';
+import { formatValidity, passwordResetMail } from './password-reset.mail.js';
 
 const RESET_URL =
   'https://eventhub.test/reset-password?token=abc-123_DEF&source=email';
 
-const mail = (overrides: { firstName?: string; resetUrl?: string } = {}) => {
+const HOUR = 60 * 60 * 1000;
+
+const mail = (
+  overrides: {
+    firstName?: string;
+    resetUrl?: string;
+    validForMs?: number;
+  } = {},
+) => {
   const message = passwordResetMail({
     to: 'camille@exemple.fr',
     firstName: 'Camille',
     resetUrl: RESET_URL,
+    validForMs: HOUR,
     ...overrides,
   });
   return { ...message, html: String(message.html), text: message.text ?? '' };
@@ -59,6 +68,15 @@ describe('passwordResetMail', () => {
     }
   });
 
+  it('writes the validity it is given, in both bodies', () => {
+    const { html, text } = mail({ validForMs: HOUR / 2 });
+
+    for (const body of [html, text]) {
+      expect(body).toContain('valable 30 minutes');
+      expect(body).not.toContain('1 heure');
+    }
+  });
+
   it('tells a user who asked for nothing to ignore the email, in both bodies', () => {
     const { html, text } = mail();
 
@@ -87,5 +105,18 @@ describe('passwordResetMail', () => {
 
     expect(html).toMatch(/^<!doctype html>\s*<html lang="fr">/);
     expect(html.trimEnd().endsWith('</html>')).toBe(true);
+  });
+});
+
+describe('formatValidity', () => {
+  it.each([
+    [HOUR, '1 heure'],
+    [2 * HOUR, '2 heures'],
+    [HOUR / 2, '30 minutes'],
+    [60_000, '1 minute'],
+    [1.5 * HOUR, '1 heure 30 minutes'],
+    [1_000, '1 minute'],
+  ])('writes %i ms as "%s"', (validForMs, expected) => {
+    expect(formatValidity(validForMs)).toBe(expected);
   });
 });

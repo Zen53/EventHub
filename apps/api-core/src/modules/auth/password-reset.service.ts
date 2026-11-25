@@ -46,6 +46,7 @@ export class PasswordResetService {
           to: user.email,
           firstName: user.firstName,
           resetUrl: this.resetUrl(token),
+          validForMs: PASSWORD_RESET_TOKEN_TTL_MS,
         }),
       );
     } catch (error) {
