@@ -76,7 +76,10 @@ describe('PasswordResetTokensRepository.replaceForUser', () => {
     await repository.replaceForUser(values, COOLDOWN_MS);
 
     expect(tx.insert).toHaveBeenCalledWith(passwordResetTokens);
-    expect(insertQuery.values).toHaveBeenCalledWith(values);
+    expect(insertQuery.values).toHaveBeenCalledWith({
+      ...values,
+      createdAt: NOW,
+    });
     expect(tx.delete.mock.invocationCallOrder[0]).toBeLessThan(
       tx.insert.mock.invocationCallOrder[0],
     );
@@ -129,6 +132,53 @@ describe('PasswordResetTokensRepository.replaceForUser', () => {
       error,
     );
     expect(tx.insert).not.toHaveBeenCalled();
+  });
+});
+
+describe('PasswordResetTokensRepository.isUsable', () => {
+  const tokenHash = 'b'.repeat(64);
+
+  function setupIsUsable(rows: { id: string }[]) {
+    const selectQuery = {
+      from: vi.fn(),
+      where: vi.fn(),
+      limit: vi.fn().mockResolvedValue(rows),
+    };
+    selectQuery.from.mockReturnValue(selectQuery);
+    selectQuery.where.mockReturnValue(selectQuery);
+    const db = { select: vi.fn(() => selectQuery), update: vi.fn() };
+    const repository = new PasswordResetTokensRepository(
+      db as unknown as Database,
+    );
+    return { repository, db, selectQuery };
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('is true for a token that is neither used nor expired, without consuming it', async () => {
+    const { repository, db, selectQuery } = setupIsUsable([{ id: 'token' }]);
+
+    await expect(repository.isUsable(tokenHash)).resolves.toBe(true);
+
+    const { sql, params } = render(selectQuery.where.mock.calls[0][0] as SQL);
+    expect(sql).toBe(
+      '("password_reset_tokens"."token_hash" = $1 and "password_reset_tokens"."used_at" is null and "password_reset_tokens"."expires_at" > $2)',
+    );
+    expect(params).toEqual([tokenHash, NOW.toISOString()]);
+    expect(db.update).not.toHaveBeenCalled();
+  });
+
+  it('is false when no token matches', async () => {
+    const { repository } = setupIsUsable([]);
+
+    await expect(repository.isUsable(tokenHash)).resolves.toBe(false);
   });
 });
 

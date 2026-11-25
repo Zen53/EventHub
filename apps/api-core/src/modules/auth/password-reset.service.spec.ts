@@ -37,6 +37,7 @@ function setup() {
   };
   const tokens = {
     replaceForUser: vi.fn().mockResolvedValue(true),
+    isUsable: vi.fn().mockResolvedValue(true),
     consume: vi.fn((_tokenHash: string, changePassword: ChangePassword) =>
       changePassword(row.id, transaction),
     ),
@@ -219,6 +220,18 @@ describe('PasswordResetService.reset', () => {
     );
   });
 
+  it('throws 400 INVALID_RESET_TOKEN for an unusable token without hashing any password', async () => {
+    const { service, users, tokens } = setup();
+    tokens.isUsable.mockResolvedValue(false);
+
+    expectInvalidResetToken(await resetError(service));
+    expect(tokens.isUsable).toHaveBeenCalledWith(
+      hashPasswordResetToken('reset-token'),
+    );
+    expect(users.hashPassword).not.toHaveBeenCalled();
+    expect(tokens.consume).not.toHaveBeenCalled();
+  });
+
   it('leaves the token unconsumed when the new password cannot be hashed', async () => {
     const { service, users, tokens } = setup();
     const error = new Error('pool exhausted');
@@ -229,7 +242,7 @@ describe('PasswordResetService.reset', () => {
     expect(users.setPassword).not.toHaveBeenCalled();
   });
 
-  it('throws 400 INVALID_RESET_TOKEN for an unknown, expired or used token, without changing any password', async () => {
+  it('throws 400 INVALID_RESET_TOKEN for a token used by another request in the meantime, without changing any password', async () => {
     const { service, users, tokens } = setup();
     tokens.consume.mockResolvedValue(false);
 

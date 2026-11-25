@@ -15,6 +15,13 @@ export type PasswordResetTokenValues = Pick<
   'userId' | 'tokenHash' | 'expiresAt'
 >;
 
+const usableToken = (tokenHash: string, now: Date) =>
+  and(
+    eq(passwordResetTokens.tokenHash, tokenHash),
+    isNull(passwordResetTokens.usedAt),
+    gt(passwordResetTokens.expiresAt, now),
+  );
+
 export type ChangePassword = (
   userId: string,
   transaction: Transaction,
@@ -53,9 +60,20 @@ export class PasswordResetTokensRepository {
             lt(passwordResetTokens.expiresAt, new Date()),
           ),
         );
-      await tx.insert(passwordResetTokens).values(values);
+      await tx
+        .insert(passwordResetTokens)
+        .values({ ...values, createdAt: new Date() });
       return true;
     });
+  }
+
+  async isUsable(tokenHash: string): Promise<boolean> {
+    const rows = await this.db
+      .select({ id: passwordResetTokens.id })
+      .from(passwordResetTokens)
+      .where(usableToken(tokenHash, new Date()))
+      .limit(1);
+    return rows.length > 0;
   }
 
   async consume(
@@ -67,13 +85,7 @@ export class PasswordResetTokensRepository {
       const [row] = await tx
         .update(passwordResetTokens)
         .set({ usedAt: now })
-        .where(
-          and(
-            eq(passwordResetTokens.tokenHash, tokenHash),
-            isNull(passwordResetTokens.usedAt),
-            gt(passwordResetTokens.expiresAt, now),
-          ),
-        )
+        .where(usableToken(tokenHash, now))
         .returning({ userId: passwordResetTokens.userId });
       return row !== undefined && changePassword(row.userId, tx);
     });

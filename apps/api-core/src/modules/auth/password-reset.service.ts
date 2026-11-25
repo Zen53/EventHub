@@ -47,9 +47,13 @@ export class PasswordResetService {
   }
 
   async reset(token: string, newPassword: string): Promise<void> {
+    const tokenHash = hashPasswordResetToken(token);
+    if (!(await this.tokens.isUsable(tokenHash))) {
+      throw new AppError('INVALID_RESET_TOKEN');
+    }
     const passwordHash = await this.users.hashPassword(newPassword);
     const changed = await this.tokens.consume(
-      hashPasswordResetToken(token),
+      tokenHash,
       (userId, transaction) =>
         this.users.setPassword(userId, passwordHash, transaction),
     );
