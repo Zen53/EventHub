@@ -123,6 +123,7 @@ describe('RefreshTokenService', () => {
       await expect(service.verify(issued.token)).resolves.toEqual({
         userId: USER_ID,
         jti: issued.jti,
+        issuedAt: new Date(issued.expiresAt.getTime() - REFRESH_TOKEN_TTL_MS),
         expiresAt: issued.expiresAt,
       });
     });
@@ -234,6 +235,7 @@ describe('RefreshTokenService', () => {
     const verified = {
       userId: USER_ID,
       jti: 'c1b2c3d4-0000-4000-8000-000000000003',
+      issuedAt: new Date('2026-11-13T10:00:00Z'),
       expiresAt: new Date('2026-11-20T10:00:00Z'),
     };
 

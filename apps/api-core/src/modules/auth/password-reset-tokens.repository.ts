@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { eq, lt, or } from 'drizzle-orm';
+import { and, eq, gt, isNull, lt, or } from 'drizzle-orm';
 import { type Database, InjectDatabase } from '../../core/database/index.js';
 import {
   type NewPasswordResetTokenRow,
@@ -27,5 +27,21 @@ export class PasswordResetTokensRepository {
         );
       await tx.insert(passwordResetTokens).values(values);
     });
+  }
+
+  async consume(tokenHash: string): Promise<string | null> {
+    const now = new Date();
+    const [row] = await this.db
+      .update(passwordResetTokens)
+      .set({ usedAt: now })
+      .where(
+        and(
+          eq(passwordResetTokens.tokenHash, tokenHash),
+          isNull(passwordResetTokens.usedAt),
+          gt(passwordResetTokens.expiresAt, now),
+        ),
+      )
+      .returning({ userId: passwordResetTokens.userId });
+    return row?.userId ?? null;
   }
 }

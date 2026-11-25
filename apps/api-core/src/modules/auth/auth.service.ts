@@ -6,6 +6,7 @@ import { type UserRow, UsersService } from '../users/index.js';
 import {
   type IssuedRefreshToken,
   RefreshTokenService,
+  type VerifiedRefreshToken,
 } from './refresh-token.service.js';
 
 export interface RefreshResult {
@@ -65,7 +66,7 @@ export class AuthService {
       throw invalidRefreshToken();
     }
     const user = await this.users.findById(verified.userId);
-    if (!user) {
+    if (!user || isRevokedForUser(verified, user)) {
       throw invalidRefreshToken();
     }
     const accessToken = this.accessTokens.sign({ userId: user.id });
@@ -73,6 +74,12 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 }
+
+const isRevokedForUser = (
+  { issuedAt }: VerifiedRefreshToken,
+  { refreshTokensRevokedAt }: UserRow,
+): boolean =>
+  refreshTokensRevokedAt !== null && issuedAt < refreshTokensRevokedAt;
 
 const invalidRefreshToken = () => new AppError('INVALID_REFRESH_TOKEN');
 

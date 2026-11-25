@@ -3,6 +3,10 @@ import { z } from 'zod';
 export const errorCatalog = {
   VALIDATION_ERROR: { status: 400, message: 'Validation failed' },
   BAD_REQUEST: { status: 400, message: 'Bad request' },
+  INVALID_RESET_TOKEN: {
+    status: 400,
+    message: 'Invalid, expired or already used reset token',
+  },
   UNAUTHORIZED: { status: 401, message: 'Authentication required' },
   INVALID_CREDENTIALS: { status: 401, message: 'Invalid email or password' },
   INVALID_REFRESH_TOKEN: {

@@ -41,6 +41,19 @@ export const forgotPasswordBodySchema = z.strictObject(
 
 export type ForgotPasswordBody = z.infer<typeof forgotPasswordBodySchema>;
 
+export const resetPasswordBodySchema = z.strictObject(
+  {
+    token: z
+      .string({ error: 'Le jeton est obligatoire.' })
+      .min(1, 'Le jeton est obligatoire.')
+      .max(512, 'Le jeton doit contenir au plus 512 caractères.'),
+    newPassword: passwordSchema,
+  },
+  { error: strictBodyError },
+);
+
+export type ResetPasswordBody = z.infer<typeof resetPasswordBodySchema>;
+
 export const loginResponseSchema = z.object({
   accessToken: z.string(),
   user: userSchema,

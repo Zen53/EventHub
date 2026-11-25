@@ -68,4 +68,13 @@ export class UsersRepository {
       .returning();
     return row ?? null;
   }
+
+  async updatePassword(id: string, passwordHash: string): Promise<boolean> {
+    const rows = await this.db
+      .update(users)
+      .set({ passwordHash, refreshTokensRevokedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning({ id: users.id });
+    return rows.length > 0;
+  }
 }

@@ -88,6 +88,11 @@ export class UsersService implements OnModuleInit {
     return row;
   }
 
+  async resetPassword(id: string, newPassword: string): Promise<boolean> {
+    const passwordHash = await this.hasher.hash(newPassword);
+    return this.repository.updatePassword(id, passwordHash);
+  }
+
   async verifyCredentials(
     email: string,
     password: string,

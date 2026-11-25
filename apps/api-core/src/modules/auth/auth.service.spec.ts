@@ -11,6 +11,7 @@ const row: UserRow = {
   lastName: 'Durand',
   phone: null,
   passwordHash: 'stored-hash',
+  refreshTokensRevokedAt: null,
   createdAt: new Date('2026-11-13T10:00:00Z'),
   updatedAt: new Date('2026-11-13T10:00:00Z'),
 };
@@ -33,6 +34,7 @@ const issued = {
 const verified = {
   userId: row.id,
   jti: issued.jti,
+  issuedAt: new Date('2026-11-13T10:00:00Z'),
   expiresAt: issued.expiresAt,
 };
 
@@ -146,11 +148,7 @@ describe('AuthService.logout', () => {
       service.logout('signed-refresh-token'),
     ).resolves.toBeUndefined();
     expect(refreshTokens.verify).toHaveBeenCalledWith('signed-refresh-token');
-    expect(refreshTokens.revoke).toHaveBeenCalledWith({
-      userId: row.id,
-      jti: issued.jti,
-      expiresAt: issued.expiresAt,
-    });
+    expect(refreshTokens.revoke).toHaveBeenCalledWith(verified);
   });
 
   it('succeeds without revoking an invalid or expired token', async () => {
@@ -273,6 +271,34 @@ describe('AuthService.refresh', () => {
     expect(users.findById).toHaveBeenCalledWith(row.id);
     expect(refreshTokens.issue).not.toHaveBeenCalled();
     expect(accessTokens.sign).not.toHaveBeenCalled();
+  });
+
+  it('throws 401 INVALID_REFRESH_TOKEN for a token issued before the last password reset', async () => {
+    const { service, users, refreshTokens, accessTokens } = setup();
+    users.findById.mockResolvedValue({
+      ...row,
+      refreshTokensRevokedAt: new Date('2026-11-13T10:00:00.500Z'),
+    });
+
+    expectInvalidRefreshToken(
+      await refreshError(service, 'signed-refresh-token'),
+    );
+    expect(refreshTokens.issue).not.toHaveBeenCalled();
+    expect(accessTokens.sign).not.toHaveBeenCalled();
+  });
+
+  it('accepts a token issued after the last password reset', async () => {
+    const { service, users, refreshTokens } = setup();
+    users.findById.mockResolvedValue({
+      ...row,
+      refreshTokensRevokedAt: new Date('2026-11-13T09:59:59Z'),
+    });
+    refreshTokens.issue.mockReturnValue(rotated);
+
+    await expect(service.refresh('signed-refresh-token')).resolves.toEqual({
+      accessToken: 'signed-access-token',
+      refreshToken: rotated,
+    });
   });
 
   it('revokes the old token before issuing a new access token and a new refresh token', async () => {

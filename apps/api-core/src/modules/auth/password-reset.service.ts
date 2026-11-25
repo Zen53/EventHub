@@ -3,6 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Mailer } from '@nestjs/mail';
 import type { Env } from '../../core/config/env.schema.js';
+import { AppError } from '../../core/errors/app-error.js';
 import { type UserRow, UsersService } from '../users/index.js';
 import { passwordResetMail } from './password-reset.mail.js';
 import { PasswordResetTokensRepository } from './password-reset-tokens.repository.js';
@@ -37,6 +38,13 @@ export class PasswordResetService {
       expiresAt: new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MS),
     });
     void this.send(user, token);
+  }
+
+  async reset(token: string, newPassword: string): Promise<void> {
+    const userId = await this.tokens.consume(hashPasswordResetToken(token));
+    if (!userId || !(await this.users.resetPassword(userId, newPassword))) {
+      throw new AppError('INVALID_RESET_TOKEN');
+    }
   }
 
   private async send(user: UserRow, token: string): Promise<void> {
