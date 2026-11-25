@@ -7,9 +7,7 @@ export const users = pgTable('users', {
   lastName: varchar('last_name', { length: 50 }).notNull(),
   phone: varchar('phone', { length: 16 }),
   passwordHash: text('password_hash').notNull(),
-  refreshTokensRevokedAt: timestamp('refresh_tokens_revoked_at', {
-    withTimezone: true,
-  }),
+  tokensRevokedAt: timestamp('tokens_revoked_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

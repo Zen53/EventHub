@@ -18,6 +18,7 @@ export const envVariablesSchema = z.object({
   SMTP_STARTTLS: z.enum(['required', 'opportunistic', 'never']).optional(),
   MAIL_FROM: z.string().trim().min(1),
   WEB_URL: z.url({ protocol: /^https?$/ }).optional(),
+  TRUSTED_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
 });
 
 export const envSchema = envVariablesSchema.transform((env, context) => {

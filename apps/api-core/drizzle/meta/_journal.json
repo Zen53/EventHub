@@ -50,6 +50,13 @@
       "when": 1795603402506,
       "tag": "0006_users_refresh_tokens_revoked_at",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1795700000000,
+      "tag": "0007_users_tokens_revoked_at",
+      "breakpoints": true
     }
   ]
 }

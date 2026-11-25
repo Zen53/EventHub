@@ -11,7 +11,7 @@ const row: UserRow = {
   lastName: 'Durand',
   phone: null,
   passwordHash: 'stored-hash',
-  refreshTokensRevokedAt: null,
+  tokensRevokedAt: null,
   createdAt: new Date('2026-11-13T10:00:00Z'),
   updatedAt: new Date('2026-11-13T10:00:00Z'),
 };
@@ -277,7 +277,7 @@ describe('AuthService.refresh', () => {
     const { service, users, refreshTokens, accessTokens } = setup();
     users.findById.mockResolvedValue({
       ...row,
-      refreshTokensRevokedAt: new Date('2026-11-13T10:00:00.500Z'),
+      tokensRevokedAt: new Date('2026-11-13T10:00:00.500Z'),
     });
 
     expectInvalidRefreshToken(
@@ -291,7 +291,7 @@ describe('AuthService.refresh', () => {
     const { service, users, refreshTokens } = setup();
     users.findById.mockResolvedValue({
       ...row,
-      refreshTokensRevokedAt: new Date('2026-11-13T09:59:59Z'),
+      tokensRevokedAt: new Date('2026-11-13T09:59:59Z'),
     });
     refreshTokens.issue.mockReturnValue(rotated);
 

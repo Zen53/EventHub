@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
-import { type Database, InjectDatabase } from '../../core/database/index.js';
+import {
+  type Database,
+  InjectDatabase,
+  type Transaction,
+} from '../../core/database/index.js';
 import { type NewUserRow, type UserRow, users } from './users.schema.js';
 
 export type UserProfileChanges = Partial<
@@ -69,10 +73,14 @@ export class UsersRepository {
     return row ?? null;
   }
 
-  async updatePassword(id: string, passwordHash: string): Promise<boolean> {
-    const rows = await this.db
+  async updatePassword(
+    id: string,
+    passwordHash: string,
+    executor: Database | Transaction = this.db,
+  ): Promise<boolean> {
+    const rows = await executor
       .update(users)
-      .set({ passwordHash, refreshTokensRevokedAt: new Date() })
+      .set({ passwordHash, tokensRevokedAt: new Date() })
       .where(eq(users.id, id))
       .returning({ id: users.id });
     return rows.length > 0;

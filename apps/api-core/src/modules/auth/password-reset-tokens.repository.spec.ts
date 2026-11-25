@@ -1,6 +1,6 @@
 import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
-import type { Database } from '../../core/database/index.js';
+import type { Database, Transaction } from '../../core/database/index.js';
 import { PasswordResetTokensRepository } from './password-reset-tokens.repository.js';
 import { passwordResetTokens } from './password-reset-tokens.schema.js';
 
@@ -14,24 +14,35 @@ const values = {
 const dialect = new PgDialect();
 const render = (condition: SQL) => dialect.sqlToQuery(condition);
 
-function setup() {
+const COOLDOWN_MS = 60 * 1000;
+
+function setup(recent: { id: string }[] = []) {
+  const selectQuery = {
+    from: vi.fn(),
+    where: vi.fn(),
+    limit: vi.fn().mockResolvedValue(recent),
+  };
+  selectQuery.from.mockReturnValue(selectQuery);
+  selectQuery.where.mockReturnValue(selectQuery);
   const deleteQuery = { where: vi.fn().mockResolvedValue(undefined) };
   const insertQuery = { values: vi.fn().mockResolvedValue(undefined) };
   const tx = {
+    select: vi.fn(() => selectQuery),
     delete: vi.fn(() => deleteQuery),
     insert: vi.fn(() => insertQuery),
   };
   const db = {
-    transaction: vi.fn((run: (transaction: typeof tx) => Promise<void>) =>
+    transaction: vi.fn((run: (transaction: typeof tx) => Promise<boolean>) =>
       run(tx),
     ),
+    select: vi.fn(),
     delete: vi.fn(),
     insert: vi.fn(),
   };
   const repository = new PasswordResetTokensRepository(
     db as unknown as Database,
   );
-  return { repository, db, tx, deleteQuery, insertQuery };
+  return { repository, db, tx, selectQuery, deleteQuery, insertQuery };
 }
 
 describe('PasswordResetTokensRepository.replaceForUser', () => {
@@ -47,7 +58,9 @@ describe('PasswordResetTokensRepository.replaceForUser', () => {
   it('deletes the previous tokens of the user and the expired ones', async () => {
     const { repository, tx, deleteQuery } = setup();
 
-    await repository.replaceForUser(values);
+    await expect(repository.replaceForUser(values, COOLDOWN_MS)).resolves.toBe(
+      true,
+    );
 
     expect(tx.delete).toHaveBeenCalledWith(passwordResetTokens);
     const { sql, params } = render(deleteQuery.where.mock.calls[0][0] as SQL);
@@ -60,7 +73,7 @@ describe('PasswordResetTokensRepository.replaceForUser', () => {
   it('inserts the hashed token after the deletion', async () => {
     const { repository, tx, insertQuery } = setup();
 
-    await repository.replaceForUser(values);
+    await repository.replaceForUser(values, COOLDOWN_MS);
 
     expect(tx.insert).toHaveBeenCalledWith(passwordResetTokens);
     expect(insertQuery.values).toHaveBeenCalledWith(values);
@@ -69,12 +82,40 @@ describe('PasswordResetTokensRepository.replaceForUser', () => {
     );
   });
 
-  it('runs both statements in one transaction', async () => {
+  it('looks for a token of the user created during the cooldown', async () => {
+    const { repository, tx, selectQuery } = setup();
+
+    await repository.replaceForUser(values, COOLDOWN_MS);
+
+    expect(selectQuery.from).toHaveBeenCalledWith(passwordResetTokens);
+    const { sql, params } = render(selectQuery.where.mock.calls[0][0] as SQL);
+    expect(sql).toBe(
+      '("password_reset_tokens"."user_id" = $1 and "password_reset_tokens"."created_at" > $2)',
+    );
+    expect(params).toEqual([values.userId, '2026-11-25T09:59:00.000Z']);
+    expect(tx.select.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.delete.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('keeps the current token and returns false during the cooldown', async () => {
+    const { repository, tx } = setup([{ id: 'recent-token' }]);
+
+    await expect(repository.replaceForUser(values, COOLDOWN_MS)).resolves.toBe(
+      false,
+    );
+
+    expect(tx.delete).not.toHaveBeenCalled();
+    expect(tx.insert).not.toHaveBeenCalled();
+  });
+
+  it('runs every statement in one transaction', async () => {
     const { repository, db } = setup();
 
-    await repository.replaceForUser(values);
+    await repository.replaceForUser(values, COOLDOWN_MS);
 
     expect(db.transaction).toHaveBeenCalledTimes(1);
+    expect(db.select).not.toHaveBeenCalled();
     expect(db.delete).not.toHaveBeenCalled();
     expect(db.insert).not.toHaveBeenCalled();
   });
@@ -84,7 +125,9 @@ describe('PasswordResetTokensRepository.replaceForUser', () => {
     const error = new Error('connection lost');
     deleteQuery.where.mockRejectedValue(error);
 
-    await expect(repository.replaceForUser(values)).rejects.toBe(error);
+    await expect(repository.replaceForUser(values, COOLDOWN_MS)).rejects.toBe(
+      error,
+    );
     expect(tx.insert).not.toHaveBeenCalled();
   });
 });
@@ -100,11 +143,18 @@ describe('PasswordResetTokensRepository.consume', () => {
     };
     updateQuery.set.mockReturnValue(updateQuery);
     updateQuery.where.mockReturnValue(updateQuery);
-    const db = { update: vi.fn(() => updateQuery) };
+    const tx = { update: vi.fn(() => updateQuery) };
+    const db = {
+      transaction: vi.fn((run: (transaction: typeof tx) => Promise<boolean>) =>
+        run(tx),
+      ),
+      update: vi.fn(),
+    };
+    const changePassword = vi.fn().mockResolvedValue(true);
     const repository = new PasswordResetTokensRepository(
       db as unknown as Database,
     );
-    return { repository, db, updateQuery };
+    return { repository, db, tx, updateQuery, changePassword };
   }
 
   beforeEach(() => {
@@ -116,15 +166,17 @@ describe('PasswordResetTokensRepository.consume', () => {
     vi.useRealTimers();
   });
 
-  it('marks as used the token that is neither used nor expired, in one statement, and returns its user', async () => {
-    const { repository, db, updateQuery } = setupConsume([
+  it('marks as used the token that is neither used nor expired, in one statement', async () => {
+    const { repository, tx, updateQuery, changePassword } = setupConsume([
       { userId: values.userId },
     ]);
 
-    await expect(repository.consume(tokenHash)).resolves.toBe(values.userId);
+    await expect(repository.consume(tokenHash, changePassword)).resolves.toBe(
+      true,
+    );
 
-    expect(db.update).toHaveBeenCalledTimes(1);
-    expect(db.update).toHaveBeenCalledWith(passwordResetTokens);
+    expect(tx.update).toHaveBeenCalledTimes(1);
+    expect(tx.update).toHaveBeenCalledWith(passwordResetTokens);
     expect(updateQuery.set).toHaveBeenCalledWith({ usedAt: NOW });
     const { sql, params } = render(updateQuery.where.mock.calls[0][0] as SQL);
     expect(sql).toBe(
@@ -133,9 +185,54 @@ describe('PasswordResetTokensRepository.consume', () => {
     expect(params).toEqual([tokenHash, NOW.toISOString()]);
   });
 
-  it('returns null when no token matches', async () => {
-    const { repository } = setupConsume([]);
+  it('changes the password of the token user in the same transaction', async () => {
+    const { repository, db, tx, changePassword } = setupConsume([
+      { userId: values.userId },
+    ]);
 
-    await expect(repository.consume(tokenHash)).resolves.toBeNull();
+    await repository.consume(tokenHash, changePassword);
+
+    expect(db.transaction).toHaveBeenCalledTimes(1);
+    expect(db.update).not.toHaveBeenCalled();
+    expect(changePassword).toHaveBeenCalledWith(
+      values.userId,
+      tx as unknown as Transaction,
+    );
+    expect(tx.update.mock.invocationCallOrder[0]).toBeLessThan(
+      changePassword.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('returns false without changing any password when no token matches', async () => {
+    const { repository, changePassword } = setupConsume([]);
+
+    await expect(repository.consume(tokenHash, changePassword)).resolves.toBe(
+      false,
+    );
+    expect(changePassword).not.toHaveBeenCalled();
+  });
+
+  it('returns false when the password of the user could not be changed', async () => {
+    const { repository, changePassword } = setupConsume([
+      { userId: values.userId },
+    ]);
+    changePassword.mockResolvedValue(false);
+
+    await expect(repository.consume(tokenHash, changePassword)).resolves.toBe(
+      false,
+    );
+  });
+
+  it('fails the transaction, which leaves the token usable, when the password update fails', async () => {
+    const { repository, db, changePassword } = setupConsume([
+      { userId: values.userId },
+    ]);
+    const error = new Error('connection lost');
+    changePassword.mockRejectedValue(error);
+
+    await expect(repository.consume(tokenHash, changePassword)).rejects.toBe(
+      error,
+    );
+    await expect(db.transaction.mock.results[0].value).rejects.toBe(error);
   });
 });

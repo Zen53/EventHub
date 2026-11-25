@@ -1,4 +1,6 @@
 import { MODULE_METADATA } from '@nestjs/common/constants.js';
+import { APP_GUARD } from '@nestjs/core';
+import { AccessTokenGuard } from '../../core/security/index.js';
 import { UsersModule } from '../users/index.js';
 import { AuthController } from './auth.controller.js';
 import { AuthModule } from './auth.module.js';
@@ -25,5 +27,11 @@ describe('AuthModule', () => {
         PasswordResetTokensRepository,
       ]),
     );
+  });
+
+  it('registers AccessTokenGuard as the global guard', () => {
+    expect(
+      Reflect.getMetadata(MODULE_METADATA.PROVIDERS, AuthModule),
+    ).toContainEqual({ provide: APP_GUARD, useClass: AccessTokenGuard });
   });
 });
