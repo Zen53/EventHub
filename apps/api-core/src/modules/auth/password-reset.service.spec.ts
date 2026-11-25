@@ -134,13 +134,16 @@ describe('PasswordResetService.request', () => {
     const logged = vi
       .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => undefined);
-    mailer.send.mockRejectedValue(new Error('SMTP down'));
+    const failure = new Error(`1 recipient(s) refused: ${row.email}`);
+    failure.name = 'MailRecipientsRejectedError';
+    mailer.send.mockRejectedValue(failure);
 
     await expect(service.request(row.email)).resolves.toBeUndefined();
     await vi.waitFor(() => expect(logged).toHaveBeenCalledTimes(1));
 
     const output = JSON.stringify(logged.mock.calls);
     expect(output).toContain(row.id);
+    expect(output).toContain('MailRecipientsRejectedError');
     expect(output).not.toContain(row.email);
     expect(output).not.toContain(sentToken());
   });

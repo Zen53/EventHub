@@ -50,8 +50,7 @@ export class PasswordResetService {
       );
     } catch (error) {
       this.logger.error(
-        `Password reset email not sent to user ${user.id}`,
-        error instanceof Error ? error.stack : undefined,
+        `Password reset email not sent to user ${user.id}: ${error instanceof Error ? error.name : 'unknown error'}`,
       );
     }
   }
