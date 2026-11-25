@@ -239,11 +239,12 @@ En base, il est stocké haché (bcrypt ou argon2) dans un champ `passwordHash`, 
 
 - **Refusée** tant que l'utilisateur organise des événements **à venir** au statut `published` : il doit d'abord les annuler (`409 ACCOUNT_HAS_UPCOMING_EVENTS`).
 - **Ce que fait le back** :
-  1. Il **anonymise** le compte au lieu de supprimer la ligne, pour que les événements passés et les réservations gardent une référence valide : `email` remplacé par `deleted-<id>@eventhub.invalid`, `firstName` = `"Utilisateur"`, `lastName` = `"supprimé"`, `phone` = `null`, `passwordHash` effacé, `deletedAt` renseigné.
-  2. Il invalide tous les refresh tokens de l'utilisateur et supprime le cookie.
+  1. Il **anonymise** le compte au lieu de supprimer la ligne, pour que les événements passés et les réservations gardent une référence valide : `email` remplacé par `deleted-<id>@eventhub.invalid`, `firstName` = `"Utilisateur"`, `lastName` = `"supprimé"`, `phone` = `null`, `passwordHash` vidé (chaîne vide, qu'aucun mot de passe ne peut vérifier), `deletedAt` renseigné.
+  2. Il invalide tous les refresh tokens de l'utilisateur (incrément de `tokenVersion`, dans le même `UPDATE`) et supprime le cookie.
   3. _(à partir du sprint 5)_ Il annule les réservations de l'utilisateur pour les événements à venir.
 - L'email d'origine est libéré : il peut servir à créer un nouveau compte.
-- Un compte anonymisé ne peut plus se connecter.
+- Un compte anonymisé ne peut plus se connecter, et le back le traite comme inexistant : un access token encore valide (15 minutes au plus) reçoit `401 UNAUTHORIZED` sur `GET /me`, `PATCH /me`, `PATCH /me/password` et `POST /events`.
+- Le mot de passe est vérifié avant les événements, pour ne rien révéler sans lui.
 - **Réponse `204`** : sans corps. Le front supprime l'access token et renvoie vers l'accueil.
 - **Erreurs** : `400 VALIDATION_ERROR`, `401 UNAUTHORIZED`, `403 WRONG_PASSWORD`, `409 ACCOUNT_HAS_UPCOMING_EVENTS`
 

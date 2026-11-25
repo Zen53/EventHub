@@ -1,5 +1,6 @@
 import type { CreateEventBody } from '@eventhub/schemas';
 import { AppError } from '../../core/errors/app-error.js';
+import type { UsersService } from '../users/index.js';
 import type { EventsRepository } from './events.repository.js';
 import type { EventDetailRow, EventSummaryRow } from './events.schema.js';
 import { EventsService } from './events.service.js';
@@ -12,9 +13,18 @@ function setup(total = 42) {
     findUpcoming: vi.fn().mockResolvedValue({ rows: [row], total }),
     findById: vi.fn().mockResolvedValue(detail),
     insert: vi.fn().mockResolvedValue(detail),
+    countUpcomingPublished: vi.fn().mockResolvedValue(0),
   };
-  const service = new EventsService(repository as unknown as EventsRepository);
-  return { service, repository };
+  const users = {
+    findById: vi
+      .fn()
+      .mockResolvedValue({ id: 'a1b2c3d4-0000-4000-8000-000000000001' }),
+  };
+  const service = new EventsService(
+    repository as unknown as EventsRepository,
+    users as unknown as UsersService,
+  );
+  return { service, repository, users };
 }
 
 describe('EventsService.listUpcoming', () => {
@@ -143,6 +153,28 @@ describe('EventsService.create', () => {
     await expect(service.create(organizerId, body)).resolves.toBe(detail);
   });
 
+  it('checks that the organizer still exists before inserting', async () => {
+    const { service, repository, users } = setup();
+
+    await service.create(organizerId, body);
+
+    expect(users.findById).toHaveBeenCalledWith(organizerId);
+    expect(users.findById.mock.invocationCallOrder[0]).toBeLessThan(
+      repository.insert.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('throws 401 UNAUTHORIZED without inserting when the organizer deleted the account', async () => {
+    const { service, repository, users } = setup();
+    users.findById.mockResolvedValue(null);
+
+    await expect(service.create(organizerId, body)).rejects.toMatchObject({
+      status: 401,
+      code: 'UNAUTHORIZED',
+    });
+    expect(repository.insert).not.toHaveBeenCalled();
+  });
+
   it('throws 500 INTERNAL_ERROR when the event cannot be read back', async () => {
     const { service, repository } = setup();
     repository.insert.mockResolvedValue(null);
@@ -151,5 +183,27 @@ describe('EventsService.create', () => {
       status: 500,
       code: 'INTERNAL_ERROR',
     });
+  });
+});
+
+describe('EventsService.hasUpcomingPublishedEvents', () => {
+  const organizerId = 'a1b2c3d4-0000-4000-8000-000000000001';
+
+  it('is false when the organizer has no upcoming published event', async () => {
+    const { service, repository } = setup();
+
+    await expect(service.hasUpcomingPublishedEvents(organizerId)).resolves.toBe(
+      false,
+    );
+    expect(repository.countUpcomingPublished).toHaveBeenCalledWith(organizerId);
+  });
+
+  it('is true as soon as one upcoming published event exists', async () => {
+    const { service, repository } = setup();
+    repository.countUpcomingPublished.mockResolvedValue(1);
+
+    await expect(service.hasUpcomingPublishedEvents(organizerId)).resolves.toBe(
+      true,
+    );
   });
 });

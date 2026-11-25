@@ -13,6 +13,7 @@ const row: UserRow = {
   phone: null,
   passwordHash: 'stored-hash',
   tokenVersion: 0,
+  deletedAt: null,
   createdAt: new Date('2026-11-13T10:00:00Z'),
   updatedAt: new Date('2026-11-13T10:00:00Z'),
 };
@@ -32,6 +33,7 @@ function setup() {
     update: vi.fn(),
     updatePassword: vi.fn(),
     incrementTokenVersion: vi.fn(),
+    anonymize: vi.fn(),
   };
   const hasher = {
     hash: vi.fn().mockResolvedValue('hashed'),
@@ -387,6 +389,59 @@ describe('UsersService.revokeAllSessions', () => {
     repository.incrementTokenVersion.mockResolvedValue(null);
 
     await expect(service.revokeAllSessions(row.id)).resolves.toBeNull();
+  });
+});
+
+describe('UsersService.verifyPassword', () => {
+  it('resolves when the password matches', async () => {
+    const { service, repository, hasher } = setup();
+    repository.findById.mockResolvedValue(row);
+    hasher.verify.mockResolvedValue(true);
+
+    await expect(
+      service.verifyPassword(row.id, 'motdepasse123'),
+    ).resolves.toBeUndefined();
+    expect(hasher.verify).toHaveBeenCalledWith('stored-hash', 'motdepasse123');
+  });
+
+  it('throws 403 WRONG_PASSWORD when the password is wrong', async () => {
+    const { service, repository, hasher } = setup();
+    repository.findById.mockResolvedValue(row);
+    hasher.verify.mockResolvedValue(false);
+
+    await expect(
+      service.verifyPassword(row.id, 'mauvais123'),
+    ).rejects.toMatchObject({ status: 403, code: 'WRONG_PASSWORD' });
+  });
+
+  it('throws 401 UNAUTHORIZED for an unknown or deleted account', async () => {
+    const { service, repository, hasher } = setup();
+    repository.findById.mockResolvedValue(null);
+
+    await expect(
+      service.verifyPassword(row.id, 'motdepasse123'),
+    ).rejects.toMatchObject({ status: 401, code: 'UNAUTHORIZED' });
+    expect(hasher.verify).not.toHaveBeenCalled();
+  });
+});
+
+describe('UsersService.anonymize', () => {
+  it('anonymizes the account', async () => {
+    const { service, repository } = setup();
+    repository.anonymize.mockResolvedValue(true);
+
+    await expect(service.anonymize(row.id)).resolves.toBeUndefined();
+    expect(repository.anonymize).toHaveBeenCalledWith(row.id);
+  });
+
+  it('throws 401 UNAUTHORIZED when the account no longer exists', async () => {
+    const { service, repository } = setup();
+    repository.anonymize.mockResolvedValue(false);
+
+    await expect(service.anonymize(row.id)).rejects.toMatchObject({
+      status: 401,
+      code: 'UNAUTHORIZED',
+    });
   });
 });
 

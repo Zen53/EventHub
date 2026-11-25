@@ -37,7 +37,7 @@ describe('UsersRepository.update', () => {
     });
     const [condition] = updateQuery.where.mock.calls[0] as [SQL];
     expect(render(condition)).toMatchObject({
-      sql: '"users"."id" = $1',
+      sql: '("users"."id" = $1 and "users"."deleted_at" is null)',
       params: [row.id],
     });
   });
@@ -66,7 +66,7 @@ describe('UsersRepository.incrementTokenVersion', () => {
     expect(render(tokenVersion).sql).toBe('"users"."token_version" + 1');
     const [condition] = updateQuery.where.mock.calls[0] as [SQL];
     expect(render(condition)).toMatchObject({
-      sql: '"users"."id" = $1',
+      sql: '("users"."id" = $1 and "users"."deleted_at" is null)',
       params: [row.id],
     });
   });
@@ -95,7 +95,7 @@ describe('UsersRepository.updatePassword', () => {
     expect(render(tokenVersion).sql).toBe('"users"."token_version" + 1');
     const [condition] = updateQuery.where.mock.calls[0] as [SQL];
     expect(render(condition)).toMatchObject({
-      sql: '"users"."id" = $1',
+      sql: '("users"."id" = $1 and "users"."deleted_at" is null)',
       params: [row.id],
     });
   });
@@ -145,4 +145,82 @@ describe('isEmailConflict', () => {
       expect(isEmailConflict(error)).toBe(false);
     },
   );
+});
+
+describe('UsersRepository reads ignore deleted accounts (EV-81)', () => {
+  function setupSelect(rows: UserRow[] = [row]) {
+    const selectQuery = {
+      from: vi.fn(),
+      where: vi.fn(),
+      limit: vi.fn().mockResolvedValue(rows),
+    };
+    selectQuery.from.mockReturnValue(selectQuery);
+    selectQuery.where.mockReturnValue(selectQuery);
+    const db = { select: vi.fn(() => selectQuery) };
+    const repository = new UsersRepository(db as unknown as Database);
+    return { repository, selectQuery };
+  }
+
+  it('finds a user by id only when the account is not deleted', async () => {
+    const { repository, selectQuery } = setupSelect();
+
+    await expect(repository.findById(row.id)).resolves.toBe(row);
+
+    const [condition] = selectQuery.where.mock.calls[0] as [SQL];
+    expect(render(condition)).toMatchObject({
+      sql: '("users"."id" = $1 and "users"."deleted_at" is null)',
+      params: [row.id],
+    });
+  });
+
+  it('finds a user by email only when the account is not deleted, so a deleted account cannot log in', async () => {
+    const { repository, selectQuery } = setupSelect([]);
+
+    await expect(
+      repository.findByEmail('camille@exemple.fr'),
+    ).resolves.toBeNull();
+
+    const [condition] = selectQuery.where.mock.calls[0] as [SQL];
+    expect(render(condition)).toMatchObject({
+      sql: '("users"."email" = $1 and "users"."deleted_at" is null)',
+      params: ['camille@exemple.fr'],
+    });
+  });
+});
+
+describe('UsersRepository.anonymize (EV-83)', () => {
+  it('anonymizes the active account in one update and invalidates its sessions', async () => {
+    const { repository, db, updateQuery } = setup();
+    updateQuery.returning.mockResolvedValue([{ id: row.id }]);
+
+    await expect(repository.anonymize(row.id)).resolves.toBe(true);
+
+    expect(db.update).toHaveBeenCalledOnce();
+    const [changes] = updateQuery.set.mock.calls[0] as [
+      Record<string, unknown>,
+    ];
+    expect(changes).toMatchObject({
+      email: `deleted-${row.id}@eventhub.invalid`,
+      firstName: 'Utilisateur',
+      lastName: 'supprimé',
+      phone: null,
+      passwordHash: '',
+    });
+    expect(render(changes.tokenVersion as SQL).sql).toBe(
+      '"users"."token_version" + 1',
+    );
+    expect(render(changes.deletedAt as SQL).sql).toBe('now()');
+    const [condition] = updateQuery.where.mock.calls[0] as [SQL];
+    expect(render(condition)).toMatchObject({
+      sql: '("users"."id" = $1 and "users"."deleted_at" is null)',
+      params: [row.id],
+    });
+  });
+
+  it('returns false for an unknown or already deleted account', async () => {
+    const { repository, updateQuery } = setup();
+    updateQuery.returning.mockResolvedValue([]);
+
+    await expect(repository.anonymize(row.id)).resolves.toBe(false);
+  });
 });

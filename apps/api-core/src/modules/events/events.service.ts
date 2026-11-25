@@ -5,6 +5,7 @@ import type {
 } from '@eventhub/schemas';
 import { Injectable } from '@nestjs/common';
 import { AppError } from '../../core/errors/app-error.js';
+import { UsersService } from '../users/index.js';
 import { EventsRepository } from './events.repository.js';
 import type { EventDetailRow, EventSummaryRow } from './events.schema.js';
 
@@ -15,7 +16,10 @@ export interface UpcomingEvents {
 
 @Injectable()
 export class EventsService {
-  constructor(private readonly repository: EventsRepository) {}
+  constructor(
+    private readonly repository: EventsRepository,
+    private readonly users: UsersService,
+  ) {}
 
   async listUpcoming({
     page,
@@ -30,6 +34,11 @@ export class EventsService {
     return { rows, meta: { page, limit, total } };
   }
 
+  /** Vrai si l'utilisateur organise des événements publiés à venir : il ne peut pas supprimer son compte. */
+  async hasUpcomingPublishedEvents(organizerId: string): Promise<boolean> {
+    return (await this.repository.countUpcomingPublished(organizerId)) > 0;
+  }
+
   async getById(id: string): Promise<EventDetailRow> {
     const row = await this.repository.findById(id);
     if (!row) {
@@ -42,6 +51,11 @@ export class EventsService {
     organizerId: string,
     body: CreateEventBody,
   ): Promise<EventDetailRow> {
+    // Un access token reste valide 15 minutes : un compte supprimé entre-temps
+    // ne doit plus pouvoir publier d'événement.
+    if (!(await this.users.findById(organizerId))) {
+      throw new AppError('UNAUTHORIZED');
+    }
     const row = await this.repository.insert({
       title: body.title,
       description: body.description,

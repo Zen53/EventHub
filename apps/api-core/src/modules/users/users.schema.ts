@@ -16,6 +16,8 @@ export const users = pgTable('users', {
   passwordHash: text('password_hash').notNull(),
   // Recopié dans chaque refresh token : l'incrémenter invalide d'un coup toutes les sessions.
   tokenVersion: integer('token_version').notNull().default(0),
+  // Renseigné quand le compte est supprimé : la ligne est anonymisée, pas effacée.
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

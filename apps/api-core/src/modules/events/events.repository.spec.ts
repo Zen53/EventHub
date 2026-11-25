@@ -217,3 +217,22 @@ describe('EventsRepository.insert', () => {
     expect(db.select).not.toHaveBeenCalled();
   });
 });
+
+describe('EventsRepository.countUpcomingPublished', () => {
+  it('counts the published events of the organizer that start after now', async () => {
+    const { repository, db } = setup();
+    const organizerId = 'a1b2c3d4-0000-4000-8000-000000000001';
+
+    await expect(repository.countUpcomingPublished(organizerId)).resolves.toBe(
+      7,
+    );
+
+    const [table, condition] = db.$count.mock.calls[0] as [unknown, SQL];
+    expect(table).toBe(events);
+    const query = dialect.sqlToQuery(condition);
+    expect(query.sql).toBe(
+      '("events"."organizer_id" = $1 and "events"."status" = $2 and "events"."starts_at" > now())',
+    );
+    expect(query.params).toEqual([organizerId, 'published']);
+  });
+});

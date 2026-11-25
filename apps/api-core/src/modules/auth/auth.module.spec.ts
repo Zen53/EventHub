@@ -1,5 +1,8 @@
 import { MODULE_METADATA } from '@nestjs/common/constants.js';
+import { EventsModule } from '../events/index.js';
 import { UsersModule } from '../users/index.js';
+import { AccountController } from './account.controller.js';
+import { AccountService } from './account.service.js';
 import { AuthController } from './auth.controller.js';
 import { AuthModule } from './auth.module.js';
 import { AuthService } from './auth.service.js';
@@ -13,10 +16,11 @@ describe('AuthModule', () => {
   it('wires the controllers, the services and the revoked refresh tokens repository', () => {
     expect(Reflect.getMetadata(MODULE_METADATA.IMPORTS, AuthModule)).toEqual([
       UsersModule,
+      EventsModule,
     ]);
     expect(
       Reflect.getMetadata(MODULE_METADATA.CONTROLLERS, AuthModule),
-    ).toEqual([AuthController, PasswordController]);
+    ).toEqual([AuthController, PasswordController, AccountController]);
     expect(Reflect.getMetadata(MODULE_METADATA.PROVIDERS, AuthModule)).toEqual(
       expect.arrayContaining([
         AuthService,
@@ -24,6 +28,7 @@ describe('AuthModule', () => {
         RevokedRefreshTokensRepository,
         PasswordResetService,
         PasswordResetTokensRepository,
+        AccountService,
       ]),
     );
   });
