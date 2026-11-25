@@ -1,8 +1,10 @@
-import { userSchema } from '@eventhub/schemas';
+import { updateMeBodySchema, userSchema } from '@eventhub/schemas';
 import { RequestMethod } from '@nestjs/common';
+import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants.js';
 import { Reflector } from '@nestjs/core';
 import { AppError } from '../../core/errors/app-error.js';
 import { IS_PUBLIC_KEY } from '../../core/security/public.decorator.js';
+import { createValidationPipe } from '../../core/validation/validation.pipe.js';
 import { UsersController } from './users.controller.js';
 import { UsersModule } from './users.module.js';
 import type { UserRow } from './users.schema.js';
@@ -95,6 +97,52 @@ describe('UsersController.updateMe', () => {
         { email: 'pris@exemple.fr', currentPassword: 'motdepasse123' },
       ),
     ).rejects.toBe(error);
+  });
+});
+
+function argSchema(method: 'updateMe', index: number) {
+  const args = Object.values(
+    Reflect.getMetadata(ROUTE_ARGS_METADATA, UsersController, method) as Record<
+      string,
+      { index: number; schema?: unknown }
+    >,
+  );
+  return args.find((arg) => arg.index === index)?.schema;
+}
+
+function validateBody(body: unknown) {
+  return createValidationPipe().transform(body, {
+    type: 'body',
+    schema: updateMeBodySchema,
+  });
+}
+
+describe('UsersController body validation', () => {
+  it('validates the PATCH /me body with updateMeBodySchema', () => {
+    expect(argSchema('updateMe', 1)).toBe(updateMeBodySchema);
+  });
+
+  it('accepts a partial body', async () => {
+    await expect(
+      validateBody({ firstName: ' Camille ', phone: null }),
+    ).resolves.toEqual({ firstName: 'Camille', phone: null });
+  });
+
+  it.each([
+    [{}, ''],
+    [{ email: 'camille.durand@exemple.fr' }, 'currentPassword'],
+    [{ currentPassword: 'motdepasse123' }, 'currentPassword'],
+    [{ firstName: 'Camille', id: row.id }, 'id'],
+    [{ password: 'motdepasse123' }, 'password'],
+  ])('throws 400 VALIDATION_ERROR for %j on %j', async (body, field) => {
+    const promise = validateBody(body);
+
+    await expect(promise).rejects.toBeInstanceOf(AppError);
+    await expect(promise).rejects.toMatchObject({
+      status: 400,
+      code: 'VALIDATION_ERROR',
+      details: [expect.objectContaining({ field })],
+    });
   });
 });
 

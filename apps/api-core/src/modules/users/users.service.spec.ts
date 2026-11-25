@@ -1,3 +1,4 @@
+import type { UpdateMeBody } from '@eventhub/schemas';
 import { AppError } from '../../core/errors/app-error.js';
 import type { PasswordHasher } from './password-hasher.js';
 import type { UsersRepository } from './users.repository.js';
@@ -121,7 +122,7 @@ describe('UsersService.updateProfile', () => {
     return context;
   }
 
-  it('updates only the sent fields, without checking the password', async () => {
+  it('updates only the sent fields, without reading the user nor checking the password', async () => {
     const { service, repository, hasher } = setupUpdate();
 
     await expect(
@@ -135,7 +136,41 @@ describe('UsersService.updateProfile', () => {
       firstName: 'Camille-Marie',
       phone: null,
     });
+    expect(repository.findById).not.toHaveBeenCalled();
     expect(hasher.verify).not.toHaveBeenCalled();
+  });
+
+  it('passes only the profile fields to the repository', async () => {
+    const { service, repository } = setupUpdate();
+    const body = {
+      lastName: 'Martin',
+      id: 'another-id',
+      passwordHash: 'injected',
+      createdAt: new Date(0),
+    } as UpdateMeBody;
+
+    await service.updateProfile(row.id, body);
+
+    expect(repository.update).toHaveBeenCalledWith(row.id, {
+      lastName: 'Martin',
+    });
+  });
+
+  it('returns the user unchanged, without writing, when there is nothing to update', async () => {
+    const { service, repository } = setupUpdate();
+
+    await expect(service.updateProfile(row.id, {})).resolves.toBe(row);
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it('throws 401 UNAUTHORIZED when there is nothing to update and the user no longer exists', async () => {
+    const { service, repository } = setupUpdate();
+    repository.findById.mockResolvedValue(null);
+
+    await expect(service.updateProfile(row.id, {})).rejects.toMatchObject({
+      status: 401,
+      code: 'UNAUTHORIZED',
+    });
   });
 
   it('changes the email after checking the current password, and never stores the password', async () => {
@@ -215,13 +250,17 @@ describe('UsersService.updateProfile', () => {
     ).rejects.toBe(error);
   });
 
-  it('throws 401 UNAUTHORIZED when the user no longer exists', async () => {
-    const { service, repository } = setupUpdate();
+  it('throws 401 UNAUTHORIZED before checking the password when the user no longer exists', async () => {
+    const { service, repository, hasher } = setupUpdate();
     repository.findById.mockResolvedValue(null);
 
     await expect(
-      service.updateProfile(row.id, { lastName: 'Martin' }),
+      service.updateProfile(row.id, {
+        email: 'camille.durand@exemple.fr',
+        currentPassword: 'motdepasse123',
+      }),
     ).rejects.toMatchObject({ status: 401, code: 'UNAUTHORIZED' });
+    expect(hasher.verify).not.toHaveBeenCalled();
     expect(repository.update).not.toHaveBeenCalled();
   });
 

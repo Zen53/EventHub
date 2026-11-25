@@ -3,7 +3,11 @@ import type { UpdateMeBody } from '@eventhub/schemas';
 import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { AppError } from '../../core/errors/app-error.js';
 import { PasswordHasher } from './password-hasher.js';
-import { isEmailConflict, UsersRepository } from './users.repository.js';
+import {
+  isEmailConflict,
+  type UserProfileChanges,
+  UsersRepository,
+} from './users.repository.js';
 import type { UserRow } from './users.schema.js';
 
 export interface CreateUserInput {
@@ -50,32 +54,30 @@ export class UsersService implements OnModuleInit {
 
   async updateProfile(
     id: string,
-    { currentPassword, ...changes }: UpdateMeBody,
+    { currentPassword, email, firstName, lastName, phone }: UpdateMeBody,
   ): Promise<UserRow> {
-    const user = await this.repository.findById(id);
-    if (!user) {
-      throw new AppError('UNAUTHORIZED');
+    const changes: UserProfileChanges = {};
+    if (email !== undefined) {
+      await this.verifyCurrentPassword(id, currentPassword);
+      changes.email = normalizeEmail(email);
     }
-    if (changes.email !== undefined) {
-      const valid =
-        currentPassword !== undefined &&
-        (await this.hasher.verify(user.passwordHash, currentPassword));
-      if (!valid) {
-        throw new AppError('WRONG_PASSWORD');
-      }
+    if (firstName !== undefined) {
+      changes.firstName = firstName;
     }
-    const row = await this.repository
-      .update(id, {
-        ...changes,
-        ...(changes.email !== undefined && {
-          email: normalizeEmail(changes.email),
-        }),
-      })
-      .catch((error: unknown) => {
-        throw isEmailConflict(error)
-          ? new AppError('EMAIL_ALREADY_USED')
-          : error;
-      });
+    if (lastName !== undefined) {
+      changes.lastName = lastName;
+    }
+    if (phone !== undefined) {
+      changes.phone = phone;
+    }
+    const row =
+      Object.keys(changes).length === 0
+        ? await this.repository.findById(id)
+        : await this.repository.update(id, changes).catch((error: unknown) => {
+            throw isEmailConflict(error)
+              ? new AppError('EMAIL_ALREADY_USED')
+              : error;
+          });
     if (!row) {
       throw new AppError('UNAUTHORIZED');
     }
@@ -93,6 +95,22 @@ export class UsersService implements OnModuleInit {
     }
     const valid = await this.hasher.verify(user.passwordHash, password);
     return valid ? user : null;
+  }
+
+  private async verifyCurrentPassword(
+    id: string,
+    currentPassword: string | undefined,
+  ): Promise<void> {
+    const user = await this.repository.findById(id);
+    if (!user) {
+      throw new AppError('UNAUTHORIZED');
+    }
+    const valid =
+      currentPassword !== undefined &&
+      (await this.hasher.verify(user.passwordHash, currentPassword));
+    if (!valid) {
+      throw new AppError('WRONG_PASSWORD');
+    }
   }
 
   private getDummyHash(): Promise<string> {
