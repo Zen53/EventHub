@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { strictBodyError } from './body.js';
 
 export const emailSchema = z
   .string({ error: "L'email est obligatoire." })
@@ -38,3 +39,66 @@ export const userSchema = z.object({
 });
 
 export type User = z.infer<typeof userSchema>;
+
+const profileFields = ['email', 'firstName', 'lastName', 'phone'] as const;
+
+export const updateMeBodySchema = z
+  .strictObject(
+    {
+      email: emailSchema.optional(),
+      firstName: nameSchema.optional(),
+      lastName: nameSchema.optional(),
+      phone: phoneSchema.nullable().optional(),
+      currentPassword: z
+        .string({ error: 'Le mot de passe actuel doit être une chaîne.' })
+        .optional(),
+    },
+    { error: strictBodyError },
+  )
+  .superRefine(
+    (body, context) => {
+      const { currentPassword } = body;
+      const hasEmail = body.email !== undefined;
+      const hasPassword = currentPassword !== undefined;
+      const passwordIssue = (message: string) =>
+        context.addIssue({
+          code: 'custom',
+          path: ['currentPassword'],
+          message,
+        });
+
+      if (hasEmail) {
+        if (!hasPassword) {
+          passwordIssue(
+            "Le mot de passe actuel est obligatoire pour changer l'email.",
+          );
+        } else if (typeof currentPassword === 'string') {
+          if (currentPassword.length === 0) {
+            passwordIssue('Le mot de passe actuel est obligatoire.');
+          } else if (currentPassword.length > 72) {
+            passwordIssue(
+              'Le mot de passe actuel doit contenir au plus 72 caractères.',
+            );
+          }
+        }
+      } else if (typeof currentPassword === 'string') {
+        passwordIssue(
+          "Le mot de passe actuel ne s'envoie que pour changer l'email.",
+        );
+      }
+
+      if (
+        !hasPassword &&
+        profileFields.every((field) => body[field] === undefined)
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: [],
+          message: 'Au moins un champ doit être modifié.',
+        });
+      }
+    },
+    { when: ({ issues }) => issues.every((issue) => issue.path?.length) },
+  );
+
+export type UpdateMeBody = z.infer<typeof updateMeBodySchema>;
