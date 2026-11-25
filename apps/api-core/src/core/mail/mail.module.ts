@@ -10,6 +10,7 @@ import type { Env } from '../config/env.schema.js';
       useFactory: (config: ConfigService<Env, true>) => ({
         transport: new SmtpTransport({
           url: config.get('SMTP_URL', { infer: true }),
+          startTls: config.get('SMTP_STARTTLS', { infer: true }),
         }),
         from: config.get('MAIL_FROM', { infer: true }),
       }),

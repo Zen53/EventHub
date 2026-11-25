@@ -105,6 +105,21 @@ describe('envSchema', () => {
     expect(JSON.stringify(result.error)).not.toContain('s3cret-value');
   });
 
+  it.each(['required', 'opportunistic', 'never'])(
+    'accepts SMTP_STARTTLS=%s',
+    (SMTP_STARTTLS) => {
+      expect(envSchema.parse({ ...required, SMTP_STARTTLS })).toMatchObject({
+        SMTP_STARTTLS,
+      });
+    },
+  );
+
+  it('rejects an unknown SMTP_STARTTLS mode', () => {
+    expect(
+      envSchema.safeParse({ ...required, SMTP_STARTTLS: 'always' }).success,
+    ).toBe(false);
+  });
+
   it.each([{ MAIL_FROM: undefined }, { MAIL_FROM: '' }, { MAIL_FROM: '  ' }])(
     'rejects the default sender in %o',
     (env) => {

@@ -70,6 +70,8 @@ services:
       # JWT_ACCESS_SECRET=$(openssl rand -base64 48) docker compose up
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-local-docker-dev-secret-do-not-use-in-production}
       SMTP_URL: smtp://mailpit:1025
+      # Mailpit ne propose pas STARTTLS, exigé par défaut hors localhost.
+      SMTP_STARTTLS: opportunistic
       MAIL_FROM: EventHub <no-reply@eventhub.local>
     depends_on:
       mailpit:
