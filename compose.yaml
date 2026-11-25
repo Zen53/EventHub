@@ -73,6 +73,7 @@ services:
       # Mailpit ne propose pas STARTTLS, exigé par défaut hors localhost.
       SMTP_STARTTLS: opportunistic
       MAIL_FROM: EventHub <no-reply@eventhub.local>
+      WEB_URL: http://localhost:3000
     depends_on:
       mailpit:
         condition: service_started

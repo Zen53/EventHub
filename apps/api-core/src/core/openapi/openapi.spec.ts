@@ -33,6 +33,7 @@ describe('OpenAPI document of the application', () => {
     vi.stubEnv('JWT_ACCESS_SECRET', 'test-only-access-secret-of-32-chars!');
     vi.stubEnv('SMTP_URL', 'smtp://localhost:1025');
     vi.stubEnv('MAIL_FROM', 'EventHub <no-reply@eventhub.test>');
+    vi.stubEnv('WEB_URL', 'http://localhost:3000');
     const { AppModule } = await import('../../app.module.js');
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],

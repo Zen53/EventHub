@@ -6,7 +6,11 @@ import {
   RESPONSE_PASSTHROUGH_METADATA,
   ROUTE_ARGS_METADATA,
 } from '@nestjs/common/constants.js';
-import { loginBodySchema, registerBodySchema } from '@eventhub/schemas';
+import {
+  forgotPasswordBodySchema,
+  loginBodySchema,
+  registerBodySchema,
+} from '@eventhub/schemas';
 import type { Request, Response } from 'express';
 import { AppError } from '../../core/errors/app-error.js';
 import { Public } from '../../core/security/index.js';
@@ -14,6 +18,7 @@ import { createValidationPipe } from '../../core/validation/validation.pipe.js';
 import type { UserRow } from '../users/index.js';
 import { AuthController } from './auth.controller.js';
 import type { AuthService } from './auth.service.js';
+import type { PasswordResetService } from './password-reset.service.js';
 
 const row: UserRow = {
   id: 'a1b2c3d4-0000-4000-8000-000000000002',
@@ -34,7 +39,7 @@ const body = {
   phone: '+33612345678',
 };
 
-type Route = 'register' | 'login' | 'logout' | 'refresh';
+type Route = 'register' | 'login' | 'logout' | 'refresh' | 'forgotPassword';
 
 const handlerOf = (name: Route) =>
   Object.getOwnPropertyDescriptor(AuthController.prototype, name)
@@ -68,8 +73,12 @@ function setup() {
     logout: vi.fn().mockResolvedValue(undefined),
     refresh: vi.fn().mockResolvedValue(refreshResult),
   };
-  const controller = new AuthController(auth as unknown as AuthService);
-  return { controller, auth };
+  const passwordResets = { request: vi.fn().mockResolvedValue(undefined) };
+  const controller = new AuthController(
+    auth as unknown as AuthService,
+    passwordResets as unknown as PasswordResetService,
+  );
+  return { controller, auth, passwordResets };
 }
 
 function routeArgs(name: Route) {
@@ -81,7 +90,9 @@ function routeArgs(name: Route) {
   );
 }
 
-function bodySchema(name: 'register' | 'login' = 'register') {
+function bodySchema(
+  name: 'register' | 'login' | 'forgotPassword' = 'register',
+) {
   return routeArgs(name).find((arg) => arg.index === 0)?.schema;
 }
 
@@ -487,5 +498,35 @@ describe('validation of the register body by the global pipe', () => {
       { field: 'role', message: "Ce champ n'est pas autorisé." },
       { field: 'id', message: "Ce champ n'est pas autorisé." },
     ]);
+  });
+});
+
+describe('AuthController.forgotPassword', () => {
+  const forgotPassword = handlerOf('forgotPassword');
+
+  it('is mounted on POST /auth/forgot-password, public, and answers 204', () => {
+    expect(Reflect.getMetadata(PATH_METADATA, forgotPassword)).toBe(
+      'forgot-password',
+    );
+    expect(Reflect.getMetadata(METHOD_METADATA, forgotPassword)).toBe(
+      RequestMethod.POST,
+    );
+    expect(Reflect.getMetadata(HTTP_CODE_METADATA, forgotPassword)).toBe(
+      HttpStatus.NO_CONTENT,
+    );
+    expect(Reflect.getMetadata(publicKey(), forgotPassword)).toBe(true);
+  });
+
+  it('validates the body with forgotPasswordBodySchema', () => {
+    expect(bodySchema('forgotPassword')).toBe(forgotPasswordBodySchema);
+  });
+
+  it('requests a password reset for the email and returns no body', async () => {
+    const { controller, passwordResets } = setup();
+
+    await expect(
+      controller.forgotPassword({ email: 'camille@exemple.fr' }),
+    ).resolves.toBeUndefined();
+    expect(passwordResets.request).toHaveBeenCalledWith('camille@exemple.fr');
   });
 });

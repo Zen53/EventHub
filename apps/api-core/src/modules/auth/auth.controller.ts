@@ -8,6 +8,8 @@ import {
   Res,
 } from '@nestjs/common';
 import {
+  type ForgotPasswordBody,
+  forgotPasswordBodySchema,
   type LoginBody,
   loginBodySchema,
   loginResponseSchema,
@@ -22,6 +24,7 @@ import { ApiEndpoint } from '../../core/openapi/api-endpoint.js';
 import { Public } from '../../core/security/index.js';
 import { toUserResponse } from '../users/index.js';
 import { AuthService, isInvalidRefreshToken } from './auth.service.js';
+import { PasswordResetService } from './password-reset.service.js';
 import {
   clearRefreshTokenCookie,
   REFRESH_TOKEN_COOKIE,
@@ -47,7 +50,10 @@ const clearRefreshTokenCookieHeader = {
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly passwordResets: PasswordResetService,
+  ) {}
 
   @Public()
   @ApiEndpoint('Créer un compte', {
@@ -124,6 +130,19 @@ export class AuthController {
   ): Promise<void> {
     await this.auth.logout(refreshTokenOf(request));
     clearRefreshTokenCookie(response);
+  }
+
+  @Public()
+  @ApiEndpoint('Demander la réinitialisation du mot de passe', {
+    description:
+      'Envoie par email un lien de réinitialisation valable 1 heure, qui invalide les liens précédents. Répond 204 que l’email ait un compte ou non.',
+  })
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async forgotPassword(
+    @Body({ schema: forgotPasswordBodySchema }) body: ForgotPasswordBody,
+  ): Promise<void> {
+    await this.passwordResets.request(body.email);
   }
 }
 

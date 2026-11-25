@@ -4,7 +4,14 @@ const DATABASE_URL = 'postgres://user:pass@localhost:5432/db';
 const JWT_ACCESS_SECRET = 'test-only-access-secret-of-32-chars!';
 const SMTP_URL = 'smtp://localhost:1025';
 const MAIL_FROM = 'EventHub <no-reply@eventhub.test>';
-const required = { DATABASE_URL, JWT_ACCESS_SECRET, SMTP_URL, MAIL_FROM };
+const WEB_URL = 'http://localhost:3000';
+const required = {
+  DATABASE_URL,
+  JWT_ACCESS_SECRET,
+  SMTP_URL,
+  MAIL_FROM,
+  WEB_URL,
+};
 
 describe('envSchema', () => {
   it('accepts a valid environment and coerces PORT to a number', () => {
@@ -126,4 +133,22 @@ describe('envSchema', () => {
       expect(envSchema.safeParse({ ...required, ...env }).success).toBe(false);
     },
   );
+
+  it.each([
+    { WEB_URL: undefined },
+    { WEB_URL: '' },
+    { WEB_URL: 'localhost:3000' },
+    { WEB_URL: 'ftp://eventhub.example.com' },
+  ])('rejects the front URL in %o', (env) => {
+    expect(envSchema.safeParse({ ...required, ...env }).success).toBe(false);
+  });
+
+  it('accepts an https front URL', () => {
+    expect(
+      envSchema.safeParse({
+        ...required,
+        WEB_URL: 'https://eventhub.example.com',
+      }).success,
+    ).toBe(true);
+  });
 });

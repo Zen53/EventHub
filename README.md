@@ -70,7 +70,7 @@ Dans `apps/api-core/.env`, renseigner `DATABASE_URL` avec l'URL de votre base Po
 openssl rand -base64 48
 ```
 
-`SMTP_URL` et `MAIL_FROM` sont déjà réglés pour Mailpit, qui capture les emails envoyés par l'API. Pour le lancer seul :
+`SMTP_URL` et `MAIL_FROM` sont déjà réglés pour Mailpit, qui capture les emails envoyés par l'API. `WEB_URL` est l'adresse du front, vers laquelle pointent les liens envoyés par email. Pour le lancer seul :
 
 ```bash
 docker compose up -d mailpit

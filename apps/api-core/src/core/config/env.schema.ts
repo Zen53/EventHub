@@ -15,6 +15,7 @@ export const envSchema = z.object({
   SMTP_URL: z.url({ protocol: /^smtps?$/ }),
   SMTP_STARTTLS: z.enum(['required', 'opportunistic', 'never']).optional(),
   MAIL_FROM: z.string().trim().min(1),
+  WEB_URL: z.url({ protocol: /^https?$/ }),
 });
 
 export type Env = z.infer<typeof envSchema>;
