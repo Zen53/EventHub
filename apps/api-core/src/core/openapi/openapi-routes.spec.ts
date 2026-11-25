@@ -108,7 +108,7 @@ describe('OpenAPI documentation of the auth and /me routes', () => {
     [routes[3], ['204']],
     [routes[4], ['200', '401']],
     [routes[5], ['200', '400', '401', '403', '409']],
-    [routes[6], ['204', '400']],
+    [routes[6], ['204', '400', '429']],
   ] as const)('documents the responses of %j', (route, statuses) => {
     expect(Object.keys(operation(route).responses).sort()).toEqual([
       ...statuses,
@@ -172,6 +172,7 @@ describe('OpenAPI documentation of the auth and /me routes', () => {
   it('answers 204 without a body on forgot-password, whatever the email', () => {
     expect(response(routes[6], '204').content).toBeUndefined();
     expectErrorResponse(routes[6], '400', 'VALIDATION_ERROR');
+    expectErrorResponse(routes[6], '429', 'TOO_MANY_REQUESTS');
     expect(operation(routes[6]).description).toContain('204');
   });
 
@@ -179,6 +180,7 @@ describe('OpenAPI documentation of the auth and /me routes', () => {
     expect(response(routes[7], '204').content).toBeUndefined();
     expectErrorResponse(routes[7], '400', 'VALIDATION_ERROR');
     expectErrorResponse(routes[7], '400', 'INVALID_RESET_TOKEN');
+    expectErrorResponse(routes[7], '429', 'TOO_MANY_REQUESTS');
   });
 
   it('returns the User on GET /me', () => {

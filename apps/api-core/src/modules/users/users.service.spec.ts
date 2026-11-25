@@ -1,4 +1,5 @@
 import type { UpdateMeBody } from '@eventhub/schemas';
+import type { Transaction } from '../../core/database/index.js';
 import { AppError } from '../../core/errors/app-error.js';
 import type { PasswordHasher } from './password-hasher.js';
 import type { UsersRepository } from './users.repository.js';
@@ -12,7 +13,7 @@ const row: UserRow = {
   lastName: 'Durand',
   phone: null,
   passwordHash: 'stored-hash',
-  refreshTokensRevokedAt: null,
+  tokensRevokedAt: null,
   createdAt: new Date('2026-11-13T10:00:00Z'),
   updatedAt: new Date('2026-11-13T10:00:00Z'),
 };
@@ -364,16 +365,33 @@ describe('UsersService dummy hash', () => {
   });
 });
 
-describe('UsersService.resetPassword', () => {
-  it('stores the hash of the new password, never the plain one', async () => {
+describe('UsersService.hashPassword', () => {
+  it('hashes the password with the password hasher', async () => {
+    const { service, hasher } = setup();
+
+    await expect(service.hashPassword('nouveaumotdepasse456')).resolves.toBe(
+      'hashed',
+    );
+    expect(hasher.hash).toHaveBeenCalledWith('nouveaumotdepasse456');
+  });
+});
+
+describe('UsersService.setPassword', () => {
+  const transaction = {} as Transaction;
+
+  it('stores the given hash in the given transaction, without hashing again', async () => {
     const { service, repository, hasher } = setup();
 
     await expect(
-      service.resetPassword(row.id, 'nouveaumotdepasse456'),
+      service.setPassword(row.id, 'new-hash', transaction),
     ).resolves.toBe(true);
 
-    expect(hasher.hash).toHaveBeenCalledWith('nouveaumotdepasse456');
-    expect(repository.updatePassword).toHaveBeenCalledWith(row.id, 'hashed');
+    expect(repository.updatePassword).toHaveBeenCalledWith(
+      row.id,
+      'new-hash',
+      transaction,
+    );
+    expect(hasher.hash).not.toHaveBeenCalled();
   });
 
   it('returns false when the user no longer exists', async () => {
@@ -381,7 +399,53 @@ describe('UsersService.resetPassword', () => {
     repository.updatePassword.mockResolvedValue(false);
 
     await expect(
-      service.resetPassword(row.id, 'nouveaumotdepasse456'),
+      service.setPassword(row.id, 'new-hash', transaction),
     ).resolves.toBe(false);
+  });
+});
+
+describe('UsersService.isRevoked', () => {
+  const revokedAt = new Date('2026-11-25T10:00:00Z');
+
+  it('is false when the tokens of the user were never revoked', async () => {
+    const { service, repository } = setup();
+    repository.findById.mockResolvedValue(row);
+
+    await expect(service.isRevoked(row.id, revokedAt)).resolves.toBe(false);
+    expect(repository.findById).toHaveBeenCalledWith(row.id);
+  });
+
+  it('is true for a token issued before the revocation', async () => {
+    const { service, repository } = setup();
+    repository.findById.mockResolvedValue({
+      ...row,
+      tokensRevokedAt: revokedAt,
+    });
+
+    await expect(
+      service.isRevoked(row.id, new Date('2026-11-25T09:59:59Z')),
+    ).resolves.toBe(true);
+  });
+
+  it.each(['2026-11-25T10:00:00Z', '2026-11-25T10:00:01Z'])(
+    'is false for a token issued at %s, not before the revocation',
+    async (issuedAt) => {
+      const { service, repository } = setup();
+      repository.findById.mockResolvedValue({
+        ...row,
+        tokensRevokedAt: revokedAt,
+      });
+
+      await expect(service.isRevoked(row.id, new Date(issuedAt))).resolves.toBe(
+        false,
+      );
+    },
+  );
+
+  it('is true when the user no longer exists', async () => {
+    const { service, repository } = setup();
+    repository.findById.mockResolvedValue(null);
+
+    await expect(service.isRevoked(row.id, revokedAt)).resolves.toBe(true);
   });
 });

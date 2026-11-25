@@ -10,6 +10,10 @@ const ALGORITHM = 'HS256';
 export const TOKEN_ISSUER = 'eventhub-api';
 const AUDIENCE = 'eventhub-api';
 
+export interface VerifiedAccessToken extends AuthenticatedUser {
+  issuedAt: Date;
+}
+
 @Injectable()
 export class AccessTokenService {
   private readonly signer: JwtSigner;
@@ -37,20 +41,21 @@ export class AccessTokenService {
     return this.signer.sign({ sub: userId });
   }
 
-  async verify(token: string): Promise<AuthenticatedUser> {
+  async verify(token: string): Promise<VerifiedAccessToken> {
     let sub: unknown;
+    let iat: unknown;
     try {
-      ({ sub } = await this.verifier.verify(token));
+      ({ sub, iat } = await this.verifier.verify(token));
     } catch (error) {
       if (error instanceof JwtError) {
         throw invalidToken();
       }
       throw error;
     }
-    if (typeof sub !== 'string' || sub === '') {
+    if (typeof sub !== 'string' || sub === '' || typeof iat !== 'number') {
       throw invalidToken();
     }
-    return { userId: sub };
+    return { userId: sub, issuedAt: new Date(iat * 1000) };
   }
 }
 

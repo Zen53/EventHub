@@ -52,6 +52,7 @@ En base, il est stocké haché (bcrypt ou argon2) dans un champ `passwordHash`, 
 - Le front et le back sont servis sur le **même domaine**. Le navigateur envoie donc le cookie tout seul sur les appels à `/auth/*` : pas de configuration CORS, et `SameSite=Strict` fonctionne.
 - Quand l'access token expire, l'API répond `401 UNAUTHORIZED`. Le front appelle alors `POST /auth/refresh`, puis rejoue la requête.
 - À chaque refresh, le back émet un **nouveau** refresh token et invalide l'ancien (rotation).
+- Après une réinitialisation du mot de passe, **tous** les tokens émis avant sont refusés : l'access token avec `401 UNAUTHORIZED`, le refresh token avec `401 INVALID_REFRESH_TOKEN`. L'utilisateur doit se reconnecter.
 
 ## Endpoints d'authentification
 
@@ -155,7 +156,9 @@ En base, il est stocké haché (bcrypt ou argon2) dans un champ `passwordHash`, 
   - est une chaîne aléatoire d'au moins 32 octets, stockée **hachée** en base ;
   - est valable **1 heure** et ne sert **qu'une fois** ;
   - est invalidé si l'utilisateur fait une nouvelle demande.
-- **Erreurs** : `400 VALIDATION_ERROR` (email mal formé)
+- Un même compte reçoit **au plus un email par minute**. Une demande faite avant ce délai répond `204` comme les autres, sans nouvel email, et le lien déjà envoyé reste valable.
+- Une même adresse IP est limitée à **5 demandes par minute**. Au-delà, l'API répond `429 TOO_MANY_REQUESTS` avec l'en-tête `Retry-After` (secondes à attendre).
+- **Erreurs** : `400 VALIDATION_ERROR` (email mal formé), `429 TOO_MANY_REQUESTS`
 
 ### `POST /auth/reset-password` : choisir un nouveau mot de passe (sprint 2)
 
@@ -169,8 +172,10 @@ En base, il est stocké haché (bcrypt ou argon2) dans un champ `passwordHash`, 
 }
 ```
 
-- **Réponse `204`** : sans corps. Le mot de passe est changé, le `resetToken` est consommé, et **tous** les refresh tokens de l'utilisateur sont invalidés. Le front renvoie vers la page de connexion.
-- **Erreurs** : `400 VALIDATION_ERROR` (mot de passe hors règles), `400 INVALID_RESET_TOKEN` (inconnu, expiré ou déjà utilisé)
+- **Réponse `204`** : sans corps. Le mot de passe est changé, le `resetToken` est consommé, et **tous** les access tokens et refresh tokens de l'utilisateur sont invalidés. Le front renvoie vers la page de connexion.
+- Le `resetToken` n'est consommé que si le mot de passe a bien été changé : après une erreur `500`, le même lien reste utilisable.
+- Une même adresse IP est limitée à **10 essais par minute**. Au-delà, l'API répond `429 TOO_MANY_REQUESTS` avec l'en-tête `Retry-After` (secondes à attendre).
+- **Erreurs** : `400 VALIDATION_ERROR` (mot de passe hors règles), `400 INVALID_RESET_TOKEN` (inconnu, expiré ou déjà utilisé), `429 TOO_MANY_REQUESTS`
 
 ## Endpoints du profil
 

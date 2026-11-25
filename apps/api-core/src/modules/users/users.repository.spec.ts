@@ -1,6 +1,6 @@
 import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
-import type { Database } from '../../core/database/index.js';
+import type { Database, Transaction } from '../../core/database/index.js';
 import { isEmailConflict, UsersRepository } from './users.repository.js';
 import { type UserRow, users } from './users.schema.js';
 
@@ -64,7 +64,7 @@ describe('UsersRepository.updatePassword', () => {
     vi.useRealTimers();
   });
 
-  it('stores the new hash and revokes the refresh tokens issued so far, in one statement', async () => {
+  it('stores the new hash and revokes the tokens issued so far, in one statement', async () => {
     const { repository, db, updateQuery } = setup();
     updateQuery.returning.mockResolvedValue([{ id: row.id }]);
 
@@ -75,7 +75,7 @@ describe('UsersRepository.updatePassword', () => {
     expect(db.update).toHaveBeenCalledTimes(1);
     expect(updateQuery.set).toHaveBeenCalledWith({
       passwordHash: 'new-hash',
-      refreshTokensRevokedAt: NOW,
+      tokensRevokedAt: NOW,
     });
     const [condition] = updateQuery.where.mock.calls[0] as [SQL];
     expect(render(condition)).toMatchObject({
@@ -91,6 +91,23 @@ describe('UsersRepository.updatePassword', () => {
     await expect(repository.updatePassword(row.id, 'new-hash')).resolves.toBe(
       false,
     );
+  });
+
+  it('runs in the given transaction instead of the database', async () => {
+    const { repository, db } = setup();
+    const transaction = setup();
+    transaction.updateQuery.returning.mockResolvedValue([{ id: row.id }]);
+
+    await expect(
+      repository.updatePassword(
+        row.id,
+        'new-hash',
+        transaction.db as unknown as Transaction,
+      ),
+    ).resolves.toBe(true);
+
+    expect(transaction.db.update).toHaveBeenCalledWith(users);
+    expect(db.update).not.toHaveBeenCalled();
   });
 });
 

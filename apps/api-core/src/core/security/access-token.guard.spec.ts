@@ -5,6 +5,7 @@ import { AccessTokenGuard } from './access-token.guard.js';
 import type { AccessTokenService } from './access-token.service.js';
 import type { AuthenticatedRequest } from './authenticated-user.js';
 import { Public } from './public.decorator.js';
+import type { TokenRevocations } from './token-revocations.js';
 
 class OpenController {
   @Public()
@@ -34,13 +35,22 @@ const contextFor = (
 };
 
 describe('AccessTokenGuard', () => {
+  const issuedAt = new Date('2026-11-25T10:00:00Z');
   const verify = vi.fn();
-  const guard = new AccessTokenGuard(new Reflector(), {
-    verify,
-  } as unknown as AccessTokenService);
+  const isRevoked = vi.fn();
+  const guard = new AccessTokenGuard(
+    new Reflector(),
+    { verify } as unknown as AccessTokenService,
+    { isRevoked } as TokenRevocations,
+  );
+
+  beforeEach(() => {
+    isRevoked.mockResolvedValue(false);
+  });
 
   afterEach(() => {
     verify.mockReset();
+    isRevoked.mockReset();
   });
 
   it.each([OpenController, PublicController])(
@@ -50,6 +60,7 @@ describe('AccessTokenGuard', () => {
       await expect(guard.canActivate(context)).resolves.toBe(true);
       expect(request.user).toBeUndefined();
       expect(verify).not.toHaveBeenCalled();
+      expect(isRevoked).not.toHaveBeenCalled();
     },
   );
 
@@ -78,16 +89,31 @@ describe('AccessTokenGuard', () => {
       code: 'UNAUTHORIZED',
     });
     expect(verify).toHaveBeenCalledWith('a.b.c');
+    expect(isRevoked).not.toHaveBeenCalled();
+    expect(request.user).toBeUndefined();
+  });
+
+  it('answers 401 UNAUTHORIZED with a token issued before the tokens of its user were revoked', async () => {
+    verify.mockResolvedValue({ userId: 'user-1', issuedAt });
+    isRevoked.mockResolvedValue(true);
+    const { context, request } = contextFor(ProtectedController, {
+      authorization: 'Bearer a.b.c',
+    });
+    const error = await guard.canActivate(context).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(AppError);
+    expect(error).toMatchObject({ status: 401, code: 'UNAUTHORIZED' });
+    expect(isRevoked).toHaveBeenCalledWith('user-1', issuedAt);
     expect(request.user).toBeUndefined();
   });
 
   it('attaches { userId } to the request for a valid token', async () => {
-    verify.mockResolvedValue({ userId: 'user-1' });
+    verify.mockResolvedValue({ userId: 'user-1', issuedAt });
     const { context, request } = contextFor(ProtectedController, {
       authorization: 'bearer a.b.c',
     });
     await expect(guard.canActivate(context)).resolves.toBe(true);
     expect(verify).toHaveBeenCalledWith('a.b.c');
+    expect(isRevoked).toHaveBeenCalledWith('user-1', issuedAt);
     expect(request.user).toEqual({ userId: 'user-1' });
   });
 });

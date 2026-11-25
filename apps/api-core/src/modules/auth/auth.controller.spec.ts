@@ -1,5 +1,6 @@
 import { HttpStatus, RequestMethod } from '@nestjs/common';
 import {
+  GUARDS_METADATA,
   HTTP_CODE_METADATA,
   METHOD_METADATA,
   PATH_METADATA,
@@ -14,6 +15,7 @@ import {
 } from '@eventhub/schemas';
 import type { Request, Response } from 'express';
 import { AppError } from '../../core/errors/app-error.js';
+import { RateLimitGuard } from '../../core/rate-limit/index.js';
 import { Public } from '../../core/security/index.js';
 import { createValidationPipe } from '../../core/validation/validation.pipe.js';
 import type { UserRow } from '../users/index.js';
@@ -28,7 +30,7 @@ const row: UserRow = {
   lastName: 'Durand',
   phone: '+33612345678',
   passwordHash: 'stored-hash',
-  refreshTokensRevokedAt: null,
+  tokensRevokedAt: null,
   createdAt: new Date('2026-11-13T10:00:00Z'),
   updatedAt: new Date('2026-11-13T10:00:00Z'),
 };
@@ -105,6 +107,17 @@ function bodySchema(
   name: 'register' | 'login' | 'forgotPassword' | 'resetPassword' = 'register',
 ) {
   return routeArgs(name).find((arg) => arg.index === 0)?.schema;
+}
+
+function rateLimitOf(routeHandler: object) {
+  return {
+    guards: Reflect.getMetadata(GUARDS_METADATA, routeHandler) as unknown,
+    limit: Reflect.getMetadata(
+      'THROTTLER:LIMITdefault',
+      routeHandler,
+    ) as unknown,
+    ttl: Reflect.getMetadata('THROTTLER:TTLdefault', routeHandler) as unknown,
+  };
 }
 
 function publicKey() {
@@ -528,6 +541,14 @@ describe('AuthController.forgotPassword', () => {
     expect(Reflect.getMetadata(publicKey(), forgotPassword)).toBe(true);
   });
 
+  it('limits each IP address to 5 requests per minute', () => {
+    expect(rateLimitOf(forgotPassword)).toEqual({
+      guards: [RateLimitGuard],
+      limit: 5,
+      ttl: 60 * 1000,
+    });
+  });
+
   it('validates the body with forgotPasswordBodySchema', () => {
     expect(bodySchema('forgotPassword')).toBe(forgotPasswordBodySchema);
   });
@@ -560,6 +581,14 @@ describe('AuthController.resetPassword', () => {
       HttpStatus.NO_CONTENT,
     );
     expect(Reflect.getMetadata(publicKey(), resetPassword)).toBe(true);
+  });
+
+  it('limits each IP address to 10 requests per minute', () => {
+    expect(rateLimitOf(resetPassword)).toEqual({
+      guards: [RateLimitGuard],
+      limit: 10,
+      ttl: 60 * 1000,
+    });
   });
 
   it('validates the body with resetPasswordBodySchema', () => {

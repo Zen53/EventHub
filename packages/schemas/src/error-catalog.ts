@@ -18,6 +18,7 @@ export const errorCatalog = {
   NOT_FOUND: { status: 404, message: 'Not found' },
   EVENT_NOT_FOUND: { status: 404, message: 'Event not found' },
   EMAIL_ALREADY_USED: { status: 409, message: 'Email already used' },
+  TOO_MANY_REQUESTS: { status: 429, message: 'Too many requests' },
   INTERNAL_ERROR: { status: 500, message: 'Internal server error' },
 } as const satisfies Record<string, { status: number; message: string }>;
 

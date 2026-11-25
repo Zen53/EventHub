@@ -10,6 +10,7 @@ import { PasswordResetTokensRepository } from './password-reset-tokens.repositor
 
 export const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 export const PASSWORD_RESET_TOKEN_BYTES = 32;
+export const PASSWORD_RESET_REQUEST_COOLDOWN_MS = 60 * 1000;
 export const PASSWORD_RESET_PATH = '/reset-password';
 
 export const hashPasswordResetToken = (token: string): string =>
@@ -32,17 +33,31 @@ export class PasswordResetService {
       return;
     }
     const token = randomBytes(PASSWORD_RESET_TOKEN_BYTES).toString('base64url');
-    await this.tokens.replaceForUser({
-      userId: user.id,
-      tokenHash: hashPasswordResetToken(token),
-      expiresAt: new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MS),
-    });
-    void this.send(user, token);
+    const stored = await this.tokens.replaceForUser(
+      {
+        userId: user.id,
+        tokenHash: hashPasswordResetToken(token),
+        expiresAt: new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MS),
+      },
+      PASSWORD_RESET_REQUEST_COOLDOWN_MS,
+    );
+    if (stored) {
+      void this.send(user, token);
+    }
   }
 
   async reset(token: string, newPassword: string): Promise<void> {
-    const userId = await this.tokens.consume(hashPasswordResetToken(token));
-    if (!userId || !(await this.users.resetPassword(userId, newPassword))) {
+    const tokenHash = hashPasswordResetToken(token);
+    if (!(await this.tokens.isUsable(tokenHash))) {
+      throw new AppError('INVALID_RESET_TOKEN');
+    }
+    const passwordHash = await this.users.hashPassword(newPassword);
+    const changed = await this.tokens.consume(
+      tokenHash,
+      (userId, transaction) =>
+        this.users.setPassword(userId, passwordHash, transaction),
+    );
+    if (!changed) {
       throw new AppError('INVALID_RESET_TOKEN');
     }
   }

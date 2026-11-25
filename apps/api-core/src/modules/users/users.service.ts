@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { UpdateMeBody } from '@eventhub/schemas';
 import { Injectable, type OnModuleInit } from '@nestjs/common';
+import type { Transaction } from '../../core/database/index.js';
 import { AppError } from '../../core/errors/app-error.js';
+import type { TokenRevocations } from '../../core/security/index.js';
 import { PasswordHasher } from './password-hasher.js';
 import {
   isEmailConflict,
@@ -20,8 +22,13 @@ export interface CreateUserInput {
 
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
 
+export const isIssuedBeforeRevocation = (
+  issuedAt: Date,
+  { tokensRevokedAt }: Pick<UserRow, 'tokensRevokedAt'>,
+): boolean => tokensRevokedAt !== null && issuedAt < tokensRevokedAt;
+
 @Injectable()
-export class UsersService implements OnModuleInit {
+export class UsersService implements OnModuleInit, TokenRevocations {
   private dummyHash?: Promise<string>;
 
   constructor(
@@ -88,9 +95,21 @@ export class UsersService implements OnModuleInit {
     return row;
   }
 
-  async resetPassword(id: string, newPassword: string): Promise<boolean> {
-    const passwordHash = await this.hasher.hash(newPassword);
-    return this.repository.updatePassword(id, passwordHash);
+  hashPassword(password: string): Promise<string> {
+    return this.hasher.hash(password);
+  }
+
+  setPassword(
+    id: string,
+    passwordHash: string,
+    transaction: Transaction,
+  ): Promise<boolean> {
+    return this.repository.updatePassword(id, passwordHash, transaction);
+  }
+
+  async isRevoked(userId: string, issuedAt: Date): Promise<boolean> {
+    const user = await this.repository.findById(userId);
+    return !user || isIssuedBeforeRevocation(issuedAt, user);
   }
 
   async verifyCredentials(
