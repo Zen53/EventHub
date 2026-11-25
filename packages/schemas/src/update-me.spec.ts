@@ -91,11 +91,27 @@ describe('updateMeBodySchema', () => {
   it.each([
     { currentPassword: 'motdepasse123' },
     { firstName: 'Camille', currentPassword: 'motdepasse123' },
-  ])('rejects currentPassword without email in %j', (body) => {
-    expect(issuesOf(body)).toEqual([
+    { firstName: 'Camille', currentPassword: '' },
+    { currentPassword: '' },
+    { firstName: 'Camille', currentPassword: 'x'.repeat(73) },
+  ])(
+    'rejects currentPassword without email in %j, with a single message',
+    (body) => {
+      expect(issuesOf(body)).toEqual([
+        {
+          path: 'currentPassword',
+          message:
+            "Le mot de passe actuel ne s'envoie que pour changer l'email.",
+        },
+      ]);
+    },
+  );
+
+  it('reports only the type error for a non string currentPassword without email', () => {
+    expect(issuesOf({ firstName: 'Camille', currentPassword: 42 })).toEqual([
       {
         path: 'currentPassword',
-        message: "Le mot de passe actuel ne s'envoie que pour changer l'email.",
+        message: 'Le mot de passe actuel doit être une chaîne.',
       },
     ]);
   });

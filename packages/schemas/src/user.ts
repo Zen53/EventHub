@@ -51,32 +51,42 @@ export const updateMeBodySchema = z
       phone: phoneSchema.nullable().optional(),
       currentPassword: z
         .string({ error: 'Le mot de passe actuel doit être une chaîne.' })
-        .min(1, 'Le mot de passe actuel est obligatoire.')
-        .max(72, 'Le mot de passe actuel doit contenir au plus 72 caractères.')
         .optional(),
     },
     { error: strictBodyError },
   )
   .superRefine(
     (body, context) => {
+      const { currentPassword } = body;
       const hasEmail = body.email !== undefined;
-      const hasPassword = body.currentPassword !== undefined;
-      if (hasEmail && !hasPassword) {
+      const hasPassword = currentPassword !== undefined;
+      const passwordIssue = (message: string) =>
         context.addIssue({
           code: 'custom',
           path: ['currentPassword'],
-          message:
+          message,
+        });
+
+      if (hasEmail) {
+        if (!hasPassword) {
+          passwordIssue(
             "Le mot de passe actuel est obligatoire pour changer l'email.",
-        });
+          );
+        } else if (typeof currentPassword === 'string') {
+          if (currentPassword.length === 0) {
+            passwordIssue('Le mot de passe actuel est obligatoire.');
+          } else if (currentPassword.length > 72) {
+            passwordIssue(
+              'Le mot de passe actuel doit contenir au plus 72 caractères.',
+            );
+          }
+        }
+      } else if (typeof currentPassword === 'string') {
+        passwordIssue(
+          "Le mot de passe actuel ne s'envoie que pour changer l'email.",
+        );
       }
-      if (!hasEmail && hasPassword) {
-        context.addIssue({
-          code: 'custom',
-          path: ['currentPassword'],
-          message:
-            "Le mot de passe actuel ne s'envoie que pour changer l'email.",
-        });
-      }
+
       if (
         !hasPassword &&
         profileFields.every((field) => body[field] === undefined)
