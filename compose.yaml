@@ -1,7 +1,7 @@
 # Lance tout le projet
 #   Front : http://localhost:3000
 #   API   : http://localhost:3001 (doc OpenAPI : /docs)
-#   Mails : http://localhost:8025 (boîte Mailpit)
+#   Mails : http://localhost:8052 (boîte Mailpit)
 name: eventhub
 
 services:
@@ -28,7 +28,7 @@ services:
     image: axllent/mailpit:v1.21
     ports:
       - "1052:1025"
-      - "8025:8025"
+      - "8052:8025"
     restart: unless-stopped
 
   # Applique les migrations Drizzle puis s'arrête ; l'API attend qu'il ait réussi.

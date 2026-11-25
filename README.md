@@ -38,7 +38,7 @@ Compose démarre PostgreSQL et Mailpit, applique les migrations, charge les donn
 
 - Front : http://localhost:3000
 - API : http://localhost:3001 (documentation OpenAPI sur http://localhost:3001/docs)
-- Emails : http://localhost:8025 (Mailpit capture les emails envoyés par l'API, aucun ne part vers l'extérieur)
+- Emails : http://localhost:8052 (Mailpit capture les emails envoyés par l'API, aucun ne part vers l'extérieur)
 
 Pour repartir d'une base vide :
 
@@ -76,7 +76,7 @@ openssl rand -base64 48
 docker compose up -d mailpit
 ```
 
-Les emails s'affichent sur http://localhost:8025.
+Les emails s'affichent sur http://localhost:8052.
 
 L'API refuse de démarrer si une variable manque ou est invalide.
 
