@@ -1,6 +1,7 @@
 # Lance tout le projet
 #   Front : http://localhost:3000
 #   API   : http://localhost:3001 (doc OpenAPI : /docs)
+#   Mails : http://localhost:8025 (boîte Mailpit)
 name: eventhub
 
 services:
@@ -21,6 +22,14 @@ services:
       interval: 2s
       timeout: 5s
       retries: 30
+
+  # Capture les emails envoyés par l'API ; rien ne part vers l'extérieur.
+  mailpit:
+    image: axllent/mailpit:v1.21
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    restart: unless-stopped
 
   # Applique les migrations Drizzle puis s'arrête ; l'API attend qu'il ait réussi.
   migrate:
@@ -60,7 +69,11 @@ services:
       # Secret de développement local uniquement. Pour en utiliser un autre :
       # JWT_ACCESS_SECRET=$(openssl rand -base64 48) docker compose up
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-local-docker-dev-secret-do-not-use-in-production}
+      SMTP_URL: smtp://mailpit:1025
+      MAIL_FROM: EventHub <no-reply@eventhub.local>
     depends_on:
+      mailpit:
+        condition: service_started
       seed:
         condition: service_completed_successfully
     ports:

@@ -2,7 +2,9 @@ import { envSchema } from './env.schema.js';
 
 const DATABASE_URL = 'postgres://user:pass@localhost:5432/db';
 const JWT_ACCESS_SECRET = 'test-only-access-secret-of-32-chars!';
-const required = { DATABASE_URL, JWT_ACCESS_SECRET };
+const SMTP_URL = 'smtp://localhost:1025';
+const MAIL_FROM = 'EventHub <no-reply@eventhub.test>';
+const required = { DATABASE_URL, JWT_ACCESS_SECRET, SMTP_URL, MAIL_FROM };
 
 describe('envSchema', () => {
   it('accepts a valid environment and coerces PORT to a number', () => {
@@ -75,4 +77,38 @@ describe('envSchema', () => {
     expect(result.success).toBe(false);
     expect(JSON.stringify(result.error)).not.toContain('s3cret-value');
   });
+
+  it.each([
+    { SMTP_URL: undefined },
+    { SMTP_URL: '' },
+    { SMTP_URL: 'localhost:1025' },
+    { SMTP_URL: 'http://localhost:8025' },
+  ])('rejects the SMTP URL in %o', (env) => {
+    expect(envSchema.safeParse({ ...required, ...env }).success).toBe(false);
+  });
+
+  it('accepts the smtps:// scheme with credentials', () => {
+    expect(
+      envSchema.safeParse({
+        ...required,
+        SMTP_URL: 'smtps://user:pass@smtp.example.com:465',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('does not echo the SMTP URL in validation errors', () => {
+    const result = envSchema.safeParse({
+      ...required,
+      SMTP_URL: 'http://user:s3cret-value@smtp.example.com',
+    });
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result.error)).not.toContain('s3cret-value');
+  });
+
+  it.each([{ MAIL_FROM: undefined }, { MAIL_FROM: '' }, { MAIL_FROM: '  ' }])(
+    'rejects the default sender in %o',
+    (env) => {
+      expect(envSchema.safeParse({ ...required, ...env }).success).toBe(false);
+    },
+  );
 });
