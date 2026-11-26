@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { UpdateMeBody } from '@eventhub/schemas';
+import type { ChangePasswordBody, UpdateMeBody } from '@eventhub/schemas';
 import { Injectable, type OnModuleInit } from '@nestjs/common';
 import type { Transaction } from '../../core/database/index.js';
 import { AppError } from '../../core/errors/app-error.js';
@@ -69,7 +69,7 @@ export class UsersService implements OnModuleInit, TokenRevocations {
   ): Promise<UserRow> {
     const changes: UserProfileChanges = {};
     if (email !== undefined) {
-      await this.verifyCurrentPassword(id, currentPassword);
+      await this.verifyPassword(id, currentPassword);
       changes.email = normalizeEmail(email);
     }
     if (firstName !== undefined) {
@@ -107,6 +107,33 @@ export class UsersService implements OnModuleInit, TokenRevocations {
     return this.repository.updatePassword(id, passwordHash, transaction);
   }
 
+  /** Change le mot de passe après vérification de l'actuel, et invalide toutes les sessions. */
+  async changePassword(
+    id: string,
+    { currentPassword, newPassword }: ChangePasswordBody,
+  ): Promise<void> {
+    await this.verifyPassword(id, currentPassword);
+    const passwordHash = await this.hasher.hash(newPassword);
+    if (!(await this.repository.updatePassword(id, passwordHash))) {
+      throw new AppError('UNAUTHORIZED');
+    }
+  }
+
+  /**
+   * Invalide tous les access et refresh tokens de l'utilisateur (EV-95).
+   * Renvoie false si le compte n'existe pas ou est supprimé.
+   */
+  revokeAllSessions(id: string): Promise<boolean> {
+    return this.repository.revokeTokens(id);
+  }
+
+  /** Anonymise le compte et invalide toutes ses sessions (EV-83). */
+  async anonymize(id: string): Promise<void> {
+    if (!(await this.repository.anonymize(id))) {
+      throw new AppError('UNAUTHORIZED');
+    }
+  }
+
   async isRevoked(userId: string, issuedAt: Date): Promise<boolean> {
     const user = await this.repository.findById(userId);
     return !user || isIssuedBeforeRevocation(issuedAt, user);
@@ -125,7 +152,8 @@ export class UsersService implements OnModuleInit, TokenRevocations {
     return valid ? user : null;
   }
 
-  private async verifyCurrentPassword(
+  /** Vérifie le mot de passe d'un utilisateur connecté (403 WRONG_PASSWORD s'il est faux). */
+  async verifyPassword(
     id: string,
     currentPassword: string | undefined,
   ): Promise<void> {

@@ -13,7 +13,7 @@ vi.mock('drizzle-orm/postgres-js', () => ({
   drizzle: vi.fn(() => ({ $client: { end: vi.fn() } })),
 }));
 
-type Route = readonly ['get' | 'post' | 'patch', string];
+type Route = readonly ['get' | 'post' | 'patch' | 'delete', string];
 
 const routes: readonly Route[] = [
   ['post', '/auth/register'],
@@ -273,6 +273,91 @@ describe('OpenAPI documentation of the auth and /me routes', () => {
 
     expect(Object.keys(examples)).toEqual([code]);
     expect(examples[code]?.value.error.code).toBe(code);
+  });
+
+  describe('PATCH /me/password', () => {
+    const changePassword: Route = ['patch', '/me/password'];
+
+    it('documents 204, 400, 401 and 403 under the Users tag, behind the bearer token', () => {
+      const { summary, tags, security, responses } = operation(changePassword);
+
+      expect(summary).toBeTruthy();
+      expect(tags).toEqual(['Users']);
+      expect(security).toBeUndefined();
+      expect(Object.keys(responses).sort()).toEqual([
+        '204',
+        '400',
+        '401',
+        '403',
+      ]);
+    });
+
+    it('answers 204 without a body and sets the new refresh cookie', () => {
+      const noContent = response(changePassword, '204');
+
+      expect(noContent.content).toBeUndefined();
+      expect(noContent.headers).toHaveProperty('Set-Cookie');
+    });
+
+    it('documents the body with both passwords required', () => {
+      const body = operation(changePassword).requestBody;
+      if (!body || !('content' in body)) {
+        throw new Error('No request body for PATCH /me/password');
+      }
+      const schema = resolve(body.content['application/json']?.schema);
+
+      expect(propertiesOf(schema)).toEqual(['currentPassword', 'newPassword']);
+      expect(schema?.required).toEqual(['currentPassword', 'newPassword']);
+      expect(schema?.additionalProperties).toBe(false);
+    });
+
+    it('documents its errors with examples', () => {
+      expectErrorResponse(changePassword, '400', 'VALIDATION_ERROR');
+      expectErrorResponse(changePassword, '401', 'UNAUTHORIZED');
+      expectErrorResponse(changePassword, '403', 'WRONG_PASSWORD');
+    });
+  });
+
+  describe('DELETE /me', () => {
+    const deleteMe: Route = ['delete', '/me'];
+
+    it('documents 204, 400, 401, 403 and 409 under the Users tag, behind the bearer token', () => {
+      const { summary, tags, security, responses } = operation(deleteMe);
+
+      expect(summary).toBeTruthy();
+      expect(tags).toEqual(['Users']);
+      expect(security).toBeUndefined();
+      expect(Object.keys(responses).sort()).toEqual([
+        '204',
+        '400',
+        '401',
+        '403',
+        '409',
+      ]);
+    });
+
+    it('answers 204 without a body and clears the refresh cookie', () => {
+      const noContent = response(deleteMe, '204');
+
+      expect(noContent.content).toBeUndefined();
+      expect(noContent.headers).toHaveProperty('Set-Cookie');
+    });
+
+    it('documents the body with the required password', () => {
+      const body = operation(deleteMe).requestBody;
+      if (!body || !('content' in body)) {
+        throw new Error('No request body for DELETE /me');
+      }
+      const schema = resolve(body.content['application/json']?.schema);
+
+      expect(propertiesOf(schema)).toEqual(['password']);
+      expect(schema?.required).toEqual(['password']);
+    });
+
+    it('documents its errors', () => {
+      expectErrorResponse(deleteMe, '403', 'WRONG_PASSWORD');
+      expectErrorResponse(deleteMe, '409', 'ACCOUNT_HAS_UPCOMING_EVENTS');
+    });
   });
 
   it('removes the error codes extension from the document', () => {

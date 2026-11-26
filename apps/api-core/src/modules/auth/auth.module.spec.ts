@@ -1,23 +1,28 @@
 import { MODULE_METADATA } from '@nestjs/common/constants.js';
 import { APP_GUARD } from '@nestjs/core';
 import { AccessTokenGuard } from '../../core/security/index.js';
+import { EventsModule } from '../events/index.js';
 import { UsersModule } from '../users/index.js';
+import { AccountController } from './account.controller.js';
+import { AccountService } from './account.service.js';
 import { AuthController } from './auth.controller.js';
 import { AuthModule } from './auth.module.js';
 import { AuthService } from './auth.service.js';
+import { PasswordController } from './password.controller.js';
 import { PasswordResetService } from './password-reset.service.js';
 import { PasswordResetTokensRepository } from './password-reset-tokens.repository.js';
 import { RefreshTokenService } from './refresh-token.service.js';
 import { RevokedRefreshTokensRepository } from './revoked-refresh-tokens.repository.js';
 
 describe('AuthModule', () => {
-  it('wires the controller, the services and the revoked refresh tokens repository', () => {
+  it('wires the controllers, the services and the revoked refresh tokens repository', () => {
     expect(Reflect.getMetadata(MODULE_METADATA.IMPORTS, AuthModule)).toEqual([
       UsersModule,
+      EventsModule,
     ]);
     expect(
       Reflect.getMetadata(MODULE_METADATA.CONTROLLERS, AuthModule),
-    ).toEqual([AuthController]);
+    ).toEqual([AuthController, PasswordController, AccountController]);
     expect(Reflect.getMetadata(MODULE_METADATA.PROVIDERS, AuthModule)).toEqual(
       expect.arrayContaining([
         AuthService,
@@ -25,6 +30,7 @@ describe('AuthModule', () => {
         RevokedRefreshTokensRepository,
         PasswordResetService,
         PasswordResetTokensRepository,
+        AccountService,
       ]),
     );
   });

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import {
   type Database,
   InjectDatabase,
@@ -47,7 +47,7 @@ export class UsersRepository {
     const [row] = await this.db
       .select()
       .from(users)
-      .where(eq(users.email, email))
+      .where(and(eq(users.email, email), isNull(users.deletedAt)))
       .limit(1);
     return row ?? null;
   }
@@ -56,7 +56,7 @@ export class UsersRepository {
     const [row] = await this.db
       .select()
       .from(users)
-      .where(eq(users.id, id))
+      .where(activeUser(id))
       .limit(1);
     return row ?? null;
   }
@@ -68,7 +68,7 @@ export class UsersRepository {
     const [row] = await this.db
       .update(users)
       .set(changes)
-      .where(eq(users.id, id))
+      .where(activeUser(id))
       .returning();
     return row ?? null;
   }
@@ -80,9 +80,62 @@ export class UsersRepository {
   ): Promise<boolean> {
     const rows = await executor
       .update(users)
-      .set({ passwordHash, tokensRevokedAt: new Date() })
-      .where(eq(users.id, id))
+      .set({ passwordHash, tokensRevokedAt: revocationInstant() })
+      .where(activeUser(id))
+      .returning({ id: users.id });
+    return rows.length > 0;
+  }
+
+  /** Invalide toutes les sessions de l'utilisateur (EV-95) : tokens refusés s'ils sont émis avant cet instant. */
+  async revokeTokens(id: string): Promise<boolean> {
+    const rows = await this.db
+      .update(users)
+      .set({ tokensRevokedAt: revocationInstant() })
+      .where(activeUser(id))
+      .returning({ id: users.id });
+    return rows.length > 0;
+  }
+
+  /**
+   * Anonymise le compte (EV-83) au lieu d'effacer la ligne, pour que ses
+   * événements passés gardent un organisateur valide. L'email d'origine est
+   * libéré, le mot de passe effacé, et toutes les sessions sont invalidées.
+   * Renvoie false si le compte n'existe pas ou est déjà supprimé.
+   */
+  async anonymize(id: string): Promise<boolean> {
+    const rows = await this.db
+      .update(users)
+      .set({
+        email: anonymizedEmail(id),
+        firstName: ANONYMOUS_FIRST_NAME,
+        lastName: ANONYMOUS_LAST_NAME,
+        phone: null,
+        passwordHash: ERASED_PASSWORD_HASH,
+        tokensRevokedAt: revocationInstant(),
+        deletedAt: new Date(),
+      })
+      .where(activeUser(id))
       .returning({ id: users.id });
     return rows.length > 0;
   }
 }
+
+/** Unique par compte : libère l'email d'origine sans violer la contrainte d'unicité. */
+export const anonymizedEmail = (id: string) => `deleted-${id}@eventhub.invalid`;
+export const ANONYMOUS_FIRST_NAME = 'Utilisateur';
+export const ANONYMOUS_LAST_NAME = 'supprimé';
+/** Aucun mot de passe ne correspond à un hash vide : argon2 le refuse. */
+export const ERASED_PASSWORD_HASH = '';
+
+/**
+ * Instant de révocation arrondi à la seconde : les tokens portent un `iat` en
+ * secondes. Sans l'arrondi, un token émis juste après la révocation, dans la
+ * même seconde, serait refusé (par exemple celui de la session en cours après
+ * un changement de mot de passe).
+ */
+export const revocationInstant = (now = Date.now()): Date =>
+  new Date(Math.floor(now / 1000) * 1000);
+
+// Un compte supprimé est invisible : ni lecture, ni écriture, ni connexion (EV-81).
+const activeUser = (id: string) =>
+  and(eq(users.id, id), isNull(users.deletedAt));

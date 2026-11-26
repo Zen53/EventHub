@@ -8,6 +8,8 @@ export const users = pgTable('users', {
   phone: varchar('phone', { length: 16 }),
   passwordHash: text('password_hash').notNull(),
   tokensRevokedAt: timestamp('tokens_revoked_at', { withTimezone: true }),
+  // Renseigné quand le compte est supprimé : la ligne est anonymisée, pas effacée.
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

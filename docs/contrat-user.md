@@ -52,7 +52,8 @@ En base, il est stocké haché (bcrypt ou argon2) dans un champ `passwordHash`, 
 - Le front et le back sont servis sur le **même domaine**. Le navigateur envoie donc le cookie tout seul sur les appels à `/auth/*` : pas de configuration CORS, et `SameSite=Strict` fonctionne.
 - Quand l'access token expire, l'API répond `401 UNAUTHORIZED`. Le front appelle alors `POST /auth/refresh`, puis rejoue la requête.
 - À chaque refresh, le back émet un **nouveau** refresh token et invalide l'ancien (rotation).
-- Après une réinitialisation du mot de passe, **tous** les tokens émis avant sont refusés : l'access token avec `401 UNAUTHORIZED`, le refresh token avec `401 INVALID_REFRESH_TOKEN`. L'utilisateur doit se reconnecter.
+- Après une réinitialisation ou un changement du mot de passe, et après la suppression du compte, **tous** les tokens émis avant sont refusés : l'access token avec `401 UNAUTHORIZED`, le refresh token avec `401 INVALID_REFRESH_TOKEN`. Après une réinitialisation, l'utilisateur doit se reconnecter.
+- Côté back, c'est `users.tokens_revoked_at` : un token dont l'`iat` est antérieur est refusé. Pour invalider toutes les sessions d'un utilisateur, appeler `UsersService.revokeAllSessions(userId)`. L'instant de révocation est arrondi à la seconde, comme l'`iat` des tokens : un token émis juste après, dans la même seconde, reste valide.
 
 ## Endpoints d'authentification
 
@@ -226,7 +227,8 @@ En base, il est stocké haché (bcrypt ou argon2) dans un champ `passwordHash`, 
 }
 ```
 
-- **Réponse `204`** : sans corps. Tous les refresh tokens de l'utilisateur sont invalidés, sauf celui de la session en cours.
+- **Réponse `204`** : sans corps. Tous les tokens de l'utilisateur sont invalidés, y compris ceux de la session en cours, qui reçoit un **nouveau refresh token en cookie** et reste donc connectée : son access token reçoit un `401` à la requête suivante, et le front le renouvelle avec `POST /auth/refresh` comme pour un token expiré. Les autres appareils sont déconnectés.
+- Les règles du nouveau mot de passe sont celles de l'inscription. L'ancien n'a pas à les respecter : il est seulement comparé au mot de passe enregistré.
 - **Erreurs** : `400 VALIDATION_ERROR`, `401 UNAUTHORIZED`, `403 WRONG_PASSWORD`
 
 ### `DELETE /me` : supprimer mon compte (sprint 2)
@@ -242,11 +244,12 @@ En base, il est stocké haché (bcrypt ou argon2) dans un champ `passwordHash`, 
 
 - **Refusée** tant que l'utilisateur organise des événements **à venir** au statut `published` : il doit d'abord les annuler (`409 ACCOUNT_HAS_UPCOMING_EVENTS`).
 - **Ce que fait le back** :
-  1. Il **anonymise** le compte au lieu de supprimer la ligne, pour que les événements passés et les réservations gardent une référence valide : `email` remplacé par `deleted-<id>@eventhub.invalid`, `firstName` = `"Utilisateur"`, `lastName` = `"supprimé"`, `phone` = `null`, `passwordHash` effacé, `deletedAt` renseigné.
-  2. Il invalide tous les refresh tokens de l'utilisateur et supprime le cookie.
+  1. Il **anonymise** le compte au lieu de supprimer la ligne, pour que les événements passés et les réservations gardent une référence valide : `email` remplacé par `deleted-<id>@eventhub.invalid`, `firstName` = `"Utilisateur"`, `lastName` = `"supprimé"`, `phone` = `null`, `passwordHash` vidé (chaîne vide, qu'aucun mot de passe ne peut vérifier), `deletedAt` renseigné.
+  2. Il invalide tous les tokens de l'utilisateur (`tokens_revoked_at`, dans le même `UPDATE`) et supprime le cookie.
   3. _(à partir du sprint 5)_ Il annule les réservations de l'utilisateur pour les événements à venir.
 - L'email d'origine est libéré : il peut servir à créer un nouveau compte.
-- Un compte anonymisé ne peut plus se connecter.
+- Un compte anonymisé ne peut plus se connecter, et le back le traite comme inexistant : un access token encore valide reçoit `401 UNAUTHORIZED` sur toutes les routes protégées.
+- Le mot de passe est vérifié avant les événements, pour ne rien révéler sans lui.
 - **Réponse `204`** : sans corps. Le front supprime l'access token et renvoie vers l'accueil.
 - **Erreurs** : `400 VALIDATION_ERROR`, `401 UNAUTHORIZED`, `403 WRONG_PASSWORD`, `409 ACCOUNT_HAS_UPCOMING_EVENTS`
 

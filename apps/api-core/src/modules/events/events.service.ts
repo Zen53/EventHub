@@ -30,6 +30,11 @@ export class EventsService {
     return { rows, meta: { page, limit, total } };
   }
 
+  /** Vrai si l'utilisateur organise des événements publiés à venir : il ne peut pas supprimer son compte. */
+  async hasUpcomingPublishedEvents(organizerId: string): Promise<boolean> {
+    return (await this.repository.countUpcomingPublished(organizerId)) > 0;
+  }
+
   async getById(id: string): Promise<EventDetailRow> {
     const row = await this.repository.findById(id);
     if (!row) {

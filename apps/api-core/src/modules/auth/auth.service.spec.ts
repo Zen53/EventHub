@@ -12,6 +12,7 @@ const row: UserRow = {
   phone: null,
   passwordHash: 'stored-hash',
   tokensRevokedAt: null,
+  deletedAt: null,
   createdAt: new Date('2026-11-13T10:00:00Z'),
   updatedAt: new Date('2026-11-13T10:00:00Z'),
 };
@@ -45,6 +46,7 @@ function setup() {
     create: vi.fn().mockResolvedValue(row),
     verifyCredentials: vi.fn().mockResolvedValue(row),
     findById: vi.fn().mockResolvedValue(row),
+    changePassword: vi.fn().mockResolvedValue(undefined),
   };
   const accessTokens = { sign: vi.fn().mockReturnValue('signed-access-token') };
   const refreshTokens = {
@@ -342,6 +344,35 @@ describe('AuthService.refresh', () => {
     users.findById.mockRejectedValue(error);
 
     await expect(service.refresh('signed-refresh-token')).rejects.toBe(error);
+    expect(refreshTokens.issue).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthService.changePassword', () => {
+  const body = {
+    currentPassword: 'motdepasse123',
+    newPassword: 'nouveaumotdepasse456',
+  };
+
+  it('changes the password, then issues a refresh token for the current session', async () => {
+    const { service, users, refreshTokens, accessTokens } = setup();
+
+    await expect(service.changePassword(row.id, body)).resolves.toBe(issued);
+
+    expect(users.changePassword).toHaveBeenCalledWith(row.id, body);
+    expect(refreshTokens.issue).toHaveBeenCalledWith(row.id);
+    expect(users.changePassword.mock.invocationCallOrder[0]).toBeLessThan(
+      refreshTokens.issue.mock.invocationCallOrder[0],
+    );
+    expect(accessTokens.sign).not.toHaveBeenCalled();
+  });
+
+  it('propagates 403 WRONG_PASSWORD without issuing a refresh token', async () => {
+    const { service, users, refreshTokens } = setup();
+    const error = new AppError('WRONG_PASSWORD');
+    users.changePassword.mockRejectedValue(error);
+
+    await expect(service.changePassword(row.id, body)).rejects.toBe(error);
     expect(refreshTokens.issue).not.toHaveBeenCalled();
   });
 });

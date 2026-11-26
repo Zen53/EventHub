@@ -12,6 +12,7 @@ function setup(total = 42) {
     findUpcoming: vi.fn().mockResolvedValue({ rows: [row], total }),
     findById: vi.fn().mockResolvedValue(detail),
     insert: vi.fn().mockResolvedValue(detail),
+    countUpcomingPublished: vi.fn().mockResolvedValue(0),
   };
   const service = new EventsService(repository as unknown as EventsRepository);
   return { service, repository };
@@ -151,5 +152,27 @@ describe('EventsService.create', () => {
       status: 500,
       code: 'INTERNAL_ERROR',
     });
+  });
+});
+
+describe('EventsService.hasUpcomingPublishedEvents', () => {
+  const organizerId = 'a1b2c3d4-0000-4000-8000-000000000001';
+
+  it('is false when the organizer has no upcoming published event', async () => {
+    const { service, repository } = setup();
+
+    await expect(service.hasUpcomingPublishedEvents(organizerId)).resolves.toBe(
+      false,
+    );
+    expect(repository.countUpcomingPublished).toHaveBeenCalledWith(organizerId);
+  });
+
+  it('is true as soon as one upcoming published event exists', async () => {
+    const { service, repository } = setup();
+    repository.countUpcomingPublished.mockResolvedValue(1);
+
+    await expect(service.hasUpcomingPublishedEvents(organizerId)).resolves.toBe(
+      true,
+    );
   });
 });

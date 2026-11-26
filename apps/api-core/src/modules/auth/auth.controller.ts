@@ -32,23 +32,9 @@ import {
   clearRefreshTokenCookie,
   REFRESH_TOKEN_COOKIE,
   setRefreshTokenCookie,
+  clearRefreshTokenCookieHeader,
+  setRefreshTokenCookieHeader,
 } from './refresh-token.cookie.js';
-
-const setRefreshTokenCookieHeader = {
-  'Set-Cookie': {
-    description:
-      'Nouveau refresh token dans le cookie `refreshToken` (`HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/auth`, 7 jours).',
-    schema: { type: 'string' as const },
-  },
-};
-
-const clearRefreshTokenCookieHeader = {
-  'Set-Cookie': {
-    description:
-      'Suppression du cookie `refreshToken` (`Path=/auth`, date d’expiration passée).',
-    schema: { type: 'string' as const },
-  },
-};
 
 const ONE_MINUTE_MS = 60 * 1000;
 export const FORGOT_PASSWORD_RATE_LIMIT = { limit: 5, windowMs: ONE_MINUTE_MS };

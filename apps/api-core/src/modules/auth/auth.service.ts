@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import type { LoginBody, RegisterBody } from '@eventhub/schemas';
+import type {
+  ChangePasswordBody,
+  LoginBody,
+  RegisterBody,
+} from '@eventhub/schemas';
 import { AppError } from '../../core/errors/app-error.js';
 import { AccessTokenService } from '../../core/security/index.js';
 import {
@@ -41,6 +45,20 @@ export class AuthService {
     const accessToken = this.accessTokens.sign({ userId: user.id });
     const refreshToken = this.refreshTokens.issue(user.id);
     return { accessToken, refreshToken, user };
+  }
+
+  /**
+   * Change le mot de passe : tous les tokens de l'utilisateur sont invalidés,
+   * et la session en cours reçoit un nouveau refresh token pour rester
+   * connectée (son access token, révoqué lui aussi, se renouvelle au prochain
+   * 401 avec POST /auth/refresh).
+   */
+  async changePassword(
+    userId: string,
+    body: ChangePasswordBody,
+  ): Promise<IssuedRefreshToken> {
+    await this.users.changePassword(userId, body);
+    return this.refreshTokens.issue(userId);
   }
 
   async logout(token: string | undefined): Promise<void> {

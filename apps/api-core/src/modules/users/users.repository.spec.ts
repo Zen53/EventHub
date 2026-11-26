@@ -1,7 +1,11 @@
 import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
 import type { Database, Transaction } from '../../core/database/index.js';
-import { isEmailConflict, UsersRepository } from './users.repository.js';
+import {
+  isEmailConflict,
+  revocationInstant,
+  UsersRepository,
+} from './users.repository.js';
 import { type UserRow, users } from './users.schema.js';
 
 const dialect = new PgDialect();
@@ -37,7 +41,7 @@ describe('UsersRepository.update', () => {
     });
     const [condition] = updateQuery.where.mock.calls[0] as [SQL];
     expect(render(condition)).toMatchObject({
-      sql: '"users"."id" = $1',
+      sql: '("users"."id" = $1 and "users"."deleted_at" is null)',
       params: [row.id],
     });
   });
@@ -79,8 +83,20 @@ describe('UsersRepository.updatePassword', () => {
     });
     const [condition] = updateQuery.where.mock.calls[0] as [SQL];
     expect(render(condition)).toMatchObject({
-      sql: '"users"."id" = $1',
+      sql: '("users"."id" = $1 and "users"."deleted_at" is null)',
       params: [row.id],
+    });
+  });
+
+  it('rounds the revocation down to the second, so a token issued right after stays valid', async () => {
+    vi.setSystemTime(new Date('2026-11-25T10:00:00.750Z'));
+    const { repository, updateQuery } = setup();
+
+    await repository.updatePassword(row.id, 'new-hash');
+
+    expect(updateQuery.set).toHaveBeenCalledWith({
+      passwordHash: 'new-hash',
+      tokensRevokedAt: new Date('2026-11-25T10:00:00.000Z'),
     });
   });
 
@@ -146,4 +162,130 @@ describe('isEmailConflict', () => {
       expect(isEmailConflict(error)).toBe(false);
     },
   );
+});
+
+describe('revocationInstant', () => {
+  it('rounds down to the second, like the iat of the tokens', () => {
+    expect(revocationInstant(Date.parse('2026-11-25T10:00:00.999Z'))).toEqual(
+      new Date('2026-11-25T10:00:00.000Z'),
+    );
+  });
+});
+
+describe('UsersRepository reads ignore deleted accounts (EV-81)', () => {
+  function setupSelect(rows: UserRow[] = [row]) {
+    const selectQuery = {
+      from: vi.fn(),
+      where: vi.fn(),
+      limit: vi.fn().mockResolvedValue(rows),
+    };
+    selectQuery.from.mockReturnValue(selectQuery);
+    selectQuery.where.mockReturnValue(selectQuery);
+    const db = { select: vi.fn(() => selectQuery) };
+    const repository = new UsersRepository(db as unknown as Database);
+    return { repository, selectQuery };
+  }
+
+  it('finds a user by id only when the account is not deleted, so its tokens are refused', async () => {
+    const { repository, selectQuery } = setupSelect();
+
+    await expect(repository.findById(row.id)).resolves.toBe(row);
+
+    const [condition] = selectQuery.where.mock.calls[0] as [SQL];
+    expect(render(condition)).toMatchObject({
+      sql: '("users"."id" = $1 and "users"."deleted_at" is null)',
+      params: [row.id],
+    });
+  });
+
+  it('finds a user by email only when the account is not deleted, so it cannot log in', async () => {
+    const { repository, selectQuery } = setupSelect([]);
+
+    await expect(
+      repository.findByEmail('camille@exemple.fr'),
+    ).resolves.toBeNull();
+
+    const [condition] = selectQuery.where.mock.calls[0] as [SQL];
+    expect(render(condition)).toMatchObject({
+      sql: '("users"."email" = $1 and "users"."deleted_at" is null)',
+      params: ['camille@exemple.fr'],
+    });
+  });
+});
+
+describe('UsersRepository.revokeTokens (EV-95)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-25T10:00:00.400Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('revokes every token issued before the current second, for an active account', async () => {
+    const { repository, updateQuery } = setup();
+    updateQuery.returning.mockResolvedValue([{ id: row.id }]);
+
+    await expect(repository.revokeTokens(row.id)).resolves.toBe(true);
+
+    expect(updateQuery.set).toHaveBeenCalledWith({
+      tokensRevokedAt: new Date('2026-11-25T10:00:00.000Z'),
+    });
+    const [condition] = updateQuery.where.mock.calls[0] as [SQL];
+    expect(render(condition)).toMatchObject({
+      sql: '("users"."id" = $1 and "users"."deleted_at" is null)',
+      params: [row.id],
+    });
+  });
+
+  it('returns false for an unknown or deleted account', async () => {
+    const { repository, updateQuery } = setup();
+    updateQuery.returning.mockResolvedValue([]);
+
+    await expect(repository.revokeTokens(row.id)).resolves.toBe(false);
+  });
+});
+
+describe('UsersRepository.anonymize (EV-83)', () => {
+  const NOW = new Date('2026-11-25T10:00:00.400Z');
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('anonymizes the active account and revokes its tokens in one update', async () => {
+    const { repository, db, updateQuery } = setup();
+    updateQuery.returning.mockResolvedValue([{ id: row.id }]);
+
+    await expect(repository.anonymize(row.id)).resolves.toBe(true);
+
+    expect(db.update).toHaveBeenCalledOnce();
+    expect(updateQuery.set).toHaveBeenCalledWith({
+      email: `deleted-${row.id}@eventhub.invalid`,
+      firstName: 'Utilisateur',
+      lastName: 'supprimé',
+      phone: null,
+      passwordHash: '',
+      tokensRevokedAt: new Date('2026-11-25T10:00:00.000Z'),
+      deletedAt: NOW,
+    });
+    const [condition] = updateQuery.where.mock.calls[0] as [SQL];
+    expect(render(condition)).toMatchObject({
+      sql: '("users"."id" = $1 and "users"."deleted_at" is null)',
+      params: [row.id],
+    });
+  });
+
+  it('returns false for an unknown or already deleted account', async () => {
+    const { repository, updateQuery } = setup();
+    updateQuery.returning.mockResolvedValue([]);
+
+    await expect(repository.anonymize(row.id)).resolves.toBe(false);
+  });
 });
