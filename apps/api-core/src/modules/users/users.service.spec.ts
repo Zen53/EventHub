@@ -1,4 +1,5 @@
 import type { UpdateMeBody } from '@eventhub/schemas';
+import type { Transaction } from '../../core/database/index.js';
 import { AppError } from '../../core/errors/app-error.js';
 import type { PasswordHasher } from './password-hasher.js';
 import type { UsersRepository } from './users.repository.js';
@@ -12,7 +13,7 @@ const row: UserRow = {
   lastName: 'Durand',
   phone: null,
   passwordHash: 'stored-hash',
-  tokenVersion: 0,
+  tokensRevokedAt: null,
   deletedAt: null,
   createdAt: new Date('2026-11-13T10:00:00Z'),
   updatedAt: new Date('2026-11-13T10:00:00Z'),
@@ -31,9 +32,9 @@ function setup() {
     findByEmail: vi.fn(),
     findById: vi.fn(),
     update: vi.fn(),
-    updatePassword: vi.fn(),
-    incrementTokenVersion: vi.fn(),
-    anonymize: vi.fn(),
+    updatePassword: vi.fn().mockResolvedValue(true),
+    revokeTokens: vi.fn().mockResolvedValue(true),
+    anonymize: vi.fn().mockResolvedValue(true),
   };
   const hasher = {
     hash: vi.fn().mockResolvedValue('hashed'),
@@ -298,153 +299,6 @@ describe('UsersService.updateProfile', () => {
   });
 });
 
-describe('UsersService.changePassword', () => {
-  const changed: UserRow = { ...row, passwordHash: 'hashed', tokenVersion: 1 };
-  const body = {
-    currentPassword: 'motdepasse123',
-    newPassword: 'nouveaumotdepasse456',
-  };
-
-  function setupChange() {
-    const context = setup();
-    context.repository.findById.mockResolvedValue(row);
-    context.hasher.verify.mockResolvedValue(true);
-    context.repository.updatePassword.mockResolvedValue(changed);
-    return context;
-  }
-
-  it('checks the current password, stores the hash of the new one and returns the row with its new token version', async () => {
-    const { service, repository, hasher } = setupChange();
-
-    await expect(service.changePassword(row.id, body)).resolves.toBe(changed);
-
-    expect(hasher.verify).toHaveBeenCalledWith('stored-hash', 'motdepasse123');
-    expect(hasher.hash).toHaveBeenCalledWith('nouveaumotdepasse456');
-    expect(repository.updatePassword).toHaveBeenCalledWith(row.id, 'hashed');
-    expect(hasher.verify.mock.invocationCallOrder[0]).toBeLessThan(
-      repository.updatePassword.mock.invocationCallOrder[0],
-    );
-  });
-
-  it('throws 403 WRONG_PASSWORD and changes nothing when the current password is wrong', async () => {
-    const { service, repository, hasher } = setupChange();
-    hasher.verify.mockResolvedValue(false);
-
-    const promise = service.changePassword(row.id, {
-      ...body,
-      currentPassword: 'mauvais123',
-    });
-
-    await expect(promise).rejects.toBeInstanceOf(AppError);
-    await expect(promise).rejects.toMatchObject({
-      status: 403,
-      code: 'WRONG_PASSWORD',
-    });
-    expect(hasher.hash).not.toHaveBeenCalled();
-    expect(repository.updatePassword).not.toHaveBeenCalled();
-  });
-
-  it('throws 401 UNAUTHORIZED before checking the password when the user no longer exists', async () => {
-    const { service, repository, hasher } = setupChange();
-    repository.findById.mockResolvedValue(null);
-
-    await expect(service.changePassword(row.id, body)).rejects.toMatchObject({
-      status: 401,
-      code: 'UNAUTHORIZED',
-    });
-    expect(hasher.verify).not.toHaveBeenCalled();
-    expect(repository.updatePassword).not.toHaveBeenCalled();
-  });
-
-  it('throws 401 UNAUTHORIZED when the user is deleted during the change', async () => {
-    const { service, repository } = setupChange();
-    repository.updatePassword.mockResolvedValue(null);
-
-    await expect(service.changePassword(row.id, body)).rejects.toMatchObject({
-      status: 401,
-      code: 'UNAUTHORIZED',
-    });
-  });
-
-  it('rethrows a database error as is', async () => {
-    const { service, repository } = setupChange();
-    const error = new Error('connection refused');
-    repository.updatePassword.mockRejectedValue(error);
-
-    await expect(service.changePassword(row.id, body)).rejects.toBe(error);
-  });
-});
-
-describe('UsersService.revokeAllSessions', () => {
-  it('increments the token version and returns the new one', async () => {
-    const { service, repository } = setup();
-    repository.incrementTokenVersion.mockResolvedValue(4);
-
-    await expect(service.revokeAllSessions(row.id)).resolves.toBe(4);
-    expect(repository.incrementTokenVersion).toHaveBeenCalledWith(row.id);
-  });
-
-  it('returns null when the user no longer exists', async () => {
-    const { service, repository } = setup();
-    repository.incrementTokenVersion.mockResolvedValue(null);
-
-    await expect(service.revokeAllSessions(row.id)).resolves.toBeNull();
-  });
-});
-
-describe('UsersService.verifyPassword', () => {
-  it('resolves when the password matches', async () => {
-    const { service, repository, hasher } = setup();
-    repository.findById.mockResolvedValue(row);
-    hasher.verify.mockResolvedValue(true);
-
-    await expect(
-      service.verifyPassword(row.id, 'motdepasse123'),
-    ).resolves.toBeUndefined();
-    expect(hasher.verify).toHaveBeenCalledWith('stored-hash', 'motdepasse123');
-  });
-
-  it('throws 403 WRONG_PASSWORD when the password is wrong', async () => {
-    const { service, repository, hasher } = setup();
-    repository.findById.mockResolvedValue(row);
-    hasher.verify.mockResolvedValue(false);
-
-    await expect(
-      service.verifyPassword(row.id, 'mauvais123'),
-    ).rejects.toMatchObject({ status: 403, code: 'WRONG_PASSWORD' });
-  });
-
-  it('throws 401 UNAUTHORIZED for an unknown or deleted account', async () => {
-    const { service, repository, hasher } = setup();
-    repository.findById.mockResolvedValue(null);
-
-    await expect(
-      service.verifyPassword(row.id, 'motdepasse123'),
-    ).rejects.toMatchObject({ status: 401, code: 'UNAUTHORIZED' });
-    expect(hasher.verify).not.toHaveBeenCalled();
-  });
-});
-
-describe('UsersService.anonymize', () => {
-  it('anonymizes the account', async () => {
-    const { service, repository } = setup();
-    repository.anonymize.mockResolvedValue(true);
-
-    await expect(service.anonymize(row.id)).resolves.toBeUndefined();
-    expect(repository.anonymize).toHaveBeenCalledWith(row.id);
-  });
-
-  it('throws 401 UNAUTHORIZED when the account no longer exists', async () => {
-    const { service, repository } = setup();
-    repository.anonymize.mockResolvedValue(false);
-
-    await expect(service.anonymize(row.id)).rejects.toMatchObject({
-      status: 401,
-      code: 'UNAUTHORIZED',
-    });
-  });
-});
-
 describe('UsersService.verifyCredentials', () => {
   it('returns the user when the password matches', async () => {
     const { service, repository, hasher } = setup();
@@ -511,5 +365,214 @@ describe('UsersService dummy hash', () => {
       service.verifyCredentials('inconnu@exemple.fr', 'motdepasse123'),
     ).resolves.toBeNull();
     expect(hasher.hash).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('UsersService.hashPassword', () => {
+  it('hashes the password with the password hasher', async () => {
+    const { service, hasher } = setup();
+
+    await expect(service.hashPassword('nouveaumotdepasse456')).resolves.toBe(
+      'hashed',
+    );
+    expect(hasher.hash).toHaveBeenCalledWith('nouveaumotdepasse456');
+  });
+});
+
+describe('UsersService.setPassword', () => {
+  const transaction = {} as Transaction;
+
+  it('stores the given hash in the given transaction, without hashing again', async () => {
+    const { service, repository, hasher } = setup();
+
+    await expect(
+      service.setPassword(row.id, 'new-hash', transaction),
+    ).resolves.toBe(true);
+
+    expect(repository.updatePassword).toHaveBeenCalledWith(
+      row.id,
+      'new-hash',
+      transaction,
+    );
+    expect(hasher.hash).not.toHaveBeenCalled();
+  });
+
+  it('returns false when the user no longer exists', async () => {
+    const { service, repository } = setup();
+    repository.updatePassword.mockResolvedValue(false);
+
+    await expect(
+      service.setPassword(row.id, 'new-hash', transaction),
+    ).resolves.toBe(false);
+  });
+});
+
+describe('UsersService.isRevoked', () => {
+  const revokedAt = new Date('2026-11-25T10:00:00Z');
+
+  it('is false when the tokens of the user were never revoked', async () => {
+    const { service, repository } = setup();
+    repository.findById.mockResolvedValue(row);
+
+    await expect(service.isRevoked(row.id, revokedAt)).resolves.toBe(false);
+    expect(repository.findById).toHaveBeenCalledWith(row.id);
+  });
+
+  it('is true for a token issued before the revocation', async () => {
+    const { service, repository } = setup();
+    repository.findById.mockResolvedValue({
+      ...row,
+      tokensRevokedAt: revokedAt,
+    });
+
+    await expect(
+      service.isRevoked(row.id, new Date('2026-11-25T09:59:59Z')),
+    ).resolves.toBe(true);
+  });
+
+  it.each(['2026-11-25T10:00:00Z', '2026-11-25T10:00:01Z'])(
+    'is false for a token issued at %s, not before the revocation',
+    async (issuedAt) => {
+      const { service, repository } = setup();
+      repository.findById.mockResolvedValue({
+        ...row,
+        tokensRevokedAt: revokedAt,
+      });
+
+      await expect(service.isRevoked(row.id, new Date(issuedAt))).resolves.toBe(
+        false,
+      );
+    },
+  );
+
+  it('is true when the user no longer exists', async () => {
+    const { service, repository } = setup();
+    repository.findById.mockResolvedValue(null);
+
+    await expect(service.isRevoked(row.id, revokedAt)).resolves.toBe(true);
+  });
+});
+
+describe('UsersService.changePassword', () => {
+  const body = {
+    currentPassword: 'motdepasse123',
+    newPassword: 'nouveaumotdepasse456',
+  };
+
+  function setupChange() {
+    const context = setup();
+    context.repository.findById.mockResolvedValue(row);
+    context.hasher.verify.mockResolvedValue(true);
+    return context;
+  }
+
+  it('checks the current password, then stores the hash of the new one and revokes the tokens', async () => {
+    const { service, repository, hasher } = setupChange();
+
+    await expect(service.changePassword(row.id, body)).resolves.toBeUndefined();
+
+    expect(hasher.verify).toHaveBeenCalledWith('stored-hash', 'motdepasse123');
+    expect(hasher.hash).toHaveBeenCalledWith('nouveaumotdepasse456');
+    expect(repository.updatePassword).toHaveBeenCalledWith(row.id, 'hashed');
+    expect(hasher.verify.mock.invocationCallOrder[0]).toBeLessThan(
+      repository.updatePassword.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('throws 403 WRONG_PASSWORD and changes nothing when the current password is wrong', async () => {
+    const { service, repository, hasher } = setupChange();
+    hasher.verify.mockResolvedValue(false);
+
+    const promise = service.changePassword(row.id, {
+      ...body,
+      currentPassword: 'mauvais123',
+    });
+
+    await expect(promise).rejects.toBeInstanceOf(AppError);
+    await expect(promise).rejects.toMatchObject({
+      status: 403,
+      code: 'WRONG_PASSWORD',
+    });
+    expect(hasher.hash).not.toHaveBeenCalled();
+    expect(repository.updatePassword).not.toHaveBeenCalled();
+  });
+
+  it('throws 401 UNAUTHORIZED before checking the password when the account no longer exists', async () => {
+    const { service, repository, hasher } = setupChange();
+    repository.findById.mockResolvedValue(null);
+
+    await expect(service.changePassword(row.id, body)).rejects.toMatchObject({
+      status: 401,
+      code: 'UNAUTHORIZED',
+    });
+    expect(hasher.verify).not.toHaveBeenCalled();
+    expect(repository.updatePassword).not.toHaveBeenCalled();
+  });
+
+  it('throws 401 UNAUTHORIZED when the account disappears during the change', async () => {
+    const { service, repository } = setupChange();
+    repository.updatePassword.mockResolvedValue(false);
+
+    await expect(service.changePassword(row.id, body)).rejects.toMatchObject({
+      status: 401,
+      code: 'UNAUTHORIZED',
+    });
+  });
+});
+
+describe('UsersService.revokeAllSessions', () => {
+  it('revokes every token of the user', async () => {
+    const { service, repository } = setup();
+
+    await expect(service.revokeAllSessions(row.id)).resolves.toBe(true);
+    expect(repository.revokeTokens).toHaveBeenCalledWith(row.id);
+  });
+
+  it('returns false for an unknown or deleted account', async () => {
+    const { service, repository } = setup();
+    repository.revokeTokens.mockResolvedValue(false);
+
+    await expect(service.revokeAllSessions(row.id)).resolves.toBe(false);
+  });
+});
+
+describe('UsersService.verifyPassword', () => {
+  it('resolves when the password matches', async () => {
+    const { service, repository, hasher } = setup();
+    repository.findById.mockResolvedValue(row);
+    hasher.verify.mockResolvedValue(true);
+
+    await expect(
+      service.verifyPassword(row.id, 'motdepasse123'),
+    ).resolves.toBeUndefined();
+  });
+
+  it('throws 403 WRONG_PASSWORD when the password is wrong', async () => {
+    const { service, repository, hasher } = setup();
+    repository.findById.mockResolvedValue(row);
+    hasher.verify.mockResolvedValue(false);
+
+    await expect(
+      service.verifyPassword(row.id, 'mauvais123'),
+    ).rejects.toMatchObject({ status: 403, code: 'WRONG_PASSWORD' });
+  });
+});
+
+describe('UsersService.anonymize', () => {
+  it('anonymizes the account', async () => {
+    const { service, repository } = setup();
+
+    await expect(service.anonymize(row.id)).resolves.toBeUndefined();
+    expect(repository.anonymize).toHaveBeenCalledWith(row.id);
+  });
+
+  it('throws 401 UNAUTHORIZED when the account no longer exists', async () => {
+    const { service, repository } = setup();
+    repository.anonymize.mockResolvedValue(false);
+
+    await expect(service.anonymize(row.id)).rejects.toMatchObject({
+      status: 401,
+      code: 'UNAUTHORIZED',
+    });
   });
 });

@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { AccessTokenGuard } from '../../core/security/index.js';
 import { EventsModule } from '../events/index.js';
 import { UsersModule } from '../users/index.js';
 import { AccountController } from './account.controller.js';
@@ -15,6 +17,7 @@ import { RevokedRefreshTokensRepository } from './revoked-refresh-tokens.reposit
   imports: [UsersModule, EventsModule],
   controllers: [AuthController, PasswordController, AccountController],
   providers: [
+    { provide: APP_GUARD, useClass: AccessTokenGuard },
     AuthService,
     RefreshTokenService,
     RevokedRefreshTokensRepository,

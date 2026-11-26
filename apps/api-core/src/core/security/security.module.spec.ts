@@ -1,9 +1,7 @@
 import { Injectable, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { envSchema } from '../config/env.schema.js';
-import { AccessTokenGuard } from './access-token.guard.js';
 import { AccessTokenService } from './access-token.service.js';
 import { SecurityModule } from './security.module.js';
 
@@ -45,19 +43,8 @@ describe('SecurityModule', () => {
     const token = accessTokens.sign({ userId: 'user-1' });
     await expect(
       moduleRef.get(AccessTokenService).verify(token),
-    ).resolves.toEqual({
+    ).resolves.toMatchObject({
       userId: 'user-1',
-    });
-  });
-
-  it('registers AccessTokenGuard as the global guard', () => {
-    const providers = Reflect.getMetadata(
-      'providers',
-      SecurityModule,
-    ) as unknown[];
-    expect(providers).toContainEqual({
-      provide: APP_GUARD,
-      useClass: AccessTokenGuard,
     });
   });
 });

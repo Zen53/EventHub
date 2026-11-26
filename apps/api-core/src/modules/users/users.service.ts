@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { ChangePasswordBody, UpdateMeBody } from '@eventhub/schemas';
 import { Injectable, type OnModuleInit } from '@nestjs/common';
+import type { Transaction } from '../../core/database/index.js';
 import { AppError } from '../../core/errors/app-error.js';
+import type { TokenRevocations } from '../../core/security/index.js';
 import { PasswordHasher } from './password-hasher.js';
 import {
   isEmailConflict,
@@ -20,8 +22,13 @@ export interface CreateUserInput {
 
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
 
+export const isIssuedBeforeRevocation = (
+  issuedAt: Date,
+  { tokensRevokedAt }: Pick<UserRow, 'tokensRevokedAt'>,
+): boolean => tokensRevokedAt !== null && issuedAt < tokensRevokedAt;
+
 @Injectable()
-export class UsersService implements OnModuleInit {
+export class UsersService implements OnModuleInit, TokenRevocations {
   private dummyHash?: Promise<string>;
 
   constructor(
@@ -88,29 +95,36 @@ export class UsersService implements OnModuleInit {
     return row;
   }
 
-  /**
-   * Change le mot de passe après vérification de l'actuel. Toutes les sessions
-   * sont invalidées : la ligne renvoyée porte la nouvelle `tokenVersion`.
-   */
+  hashPassword(password: string): Promise<string> {
+    return this.hasher.hash(password);
+  }
+
+  setPassword(
+    id: string,
+    passwordHash: string,
+    transaction: Transaction,
+  ): Promise<boolean> {
+    return this.repository.updatePassword(id, passwordHash, transaction);
+  }
+
+  /** Change le mot de passe après vérification de l'actuel, et invalide toutes les sessions. */
   async changePassword(
     id: string,
     { currentPassword, newPassword }: ChangePasswordBody,
-  ): Promise<UserRow> {
+  ): Promise<void> {
     await this.verifyPassword(id, currentPassword);
     const passwordHash = await this.hasher.hash(newPassword);
-    const row = await this.repository.updatePassword(id, passwordHash);
-    if (!row) {
+    if (!(await this.repository.updatePassword(id, passwordHash))) {
       throw new AppError('UNAUTHORIZED');
     }
-    return row;
   }
 
   /**
-   * Invalide tous les refresh tokens de l'utilisateur (EV-95), en incrémentant
-   * sa `tokenVersion`. Renvoie la nouvelle version, ou `null` si l'utilisateur n'existe pas.
+   * Invalide tous les access et refresh tokens de l'utilisateur (EV-95).
+   * Renvoie false si le compte n'existe pas ou est supprimé.
    */
-  revokeAllSessions(id: string): Promise<number | null> {
-    return this.repository.incrementTokenVersion(id);
+  revokeAllSessions(id: string): Promise<boolean> {
+    return this.repository.revokeTokens(id);
   }
 
   /** Anonymise le compte et invalide toutes ses sessions (EV-83). */
@@ -118,6 +132,11 @@ export class UsersService implements OnModuleInit {
     if (!(await this.repository.anonymize(id))) {
       throw new AppError('UNAUTHORIZED');
     }
+  }
+
+  async isRevoked(userId: string, issuedAt: Date): Promise<boolean> {
+    const user = await this.repository.findById(userId);
+    return !user || isIssuedBeforeRevocation(issuedAt, user);
   }
 
   async verifyCredentials(

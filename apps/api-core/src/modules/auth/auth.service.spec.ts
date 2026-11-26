@@ -11,7 +11,7 @@ const row: UserRow = {
   lastName: 'Durand',
   phone: null,
   passwordHash: 'stored-hash',
-  tokenVersion: 0,
+  tokensRevokedAt: null,
   deletedAt: null,
   createdAt: new Date('2026-11-13T10:00:00Z'),
   updatedAt: new Date('2026-11-13T10:00:00Z'),
@@ -35,8 +35,8 @@ const issued = {
 const verified = {
   userId: row.id,
   jti: issued.jti,
+  issuedAt: new Date('2026-11-13T10:00:00Z'),
   expiresAt: issued.expiresAt,
-  tokenVersion: 0,
 };
 
 const invalidRefreshToken = () => new AppError('INVALID_REFRESH_TOKEN');
@@ -46,7 +46,7 @@ function setup() {
     create: vi.fn().mockResolvedValue(row),
     verifyCredentials: vi.fn().mockResolvedValue(row),
     findById: vi.fn().mockResolvedValue(row),
-    changePassword: vi.fn(),
+    changePassword: vi.fn().mockResolvedValue(undefined),
   };
   const accessTokens = { sign: vi.fn().mockReturnValue('signed-access-token') };
   const refreshTokens = {
@@ -93,7 +93,7 @@ describe('AuthService.login', () => {
       'motdepasse123',
     );
     expect(accessTokens.sign).toHaveBeenCalledWith({ userId: row.id });
-    expect(refreshTokens.issue).toHaveBeenCalledWith(row.id, 0);
+    expect(refreshTokens.issue).toHaveBeenCalledWith(row.id);
   });
 
   const loginError = (service: AuthService, email: string, password: string) =>
@@ -275,26 +275,32 @@ describe('AuthService.refresh', () => {
     expect(accessTokens.sign).not.toHaveBeenCalled();
   });
 
-  it('throws 401 INVALID_REFRESH_TOKEN when the sessions were revoked since the token was issued', async () => {
+  it('throws 401 INVALID_REFRESH_TOKEN for a token issued before the last password reset', async () => {
     const { service, users, refreshTokens, accessTokens } = setup();
-    users.findById.mockResolvedValue({ ...row, tokenVersion: 1 });
+    users.findById.mockResolvedValue({
+      ...row,
+      tokensRevokedAt: new Date('2026-11-13T10:00:00.500Z'),
+    });
 
     expectInvalidRefreshToken(
       await refreshError(service, 'signed-refresh-token'),
     );
-    expect(refreshTokens.revoke).toHaveBeenCalledWith(verified);
     expect(refreshTokens.issue).not.toHaveBeenCalled();
     expect(accessTokens.sign).not.toHaveBeenCalled();
   });
 
-  it('issues the new refresh token with the current token version of the user', async () => {
+  it('accepts a token issued after the last password reset', async () => {
     const { service, users, refreshTokens } = setup();
-    refreshTokens.verify.mockResolvedValue({ ...verified, tokenVersion: 3 });
-    users.findById.mockResolvedValue({ ...row, tokenVersion: 3 });
+    users.findById.mockResolvedValue({
+      ...row,
+      tokensRevokedAt: new Date('2026-11-13T09:59:59Z'),
+    });
+    refreshTokens.issue.mockReturnValue(rotated);
 
-    await service.refresh('signed-refresh-token');
-
-    expect(refreshTokens.issue).toHaveBeenCalledWith(row.id, 3);
+    await expect(service.refresh('signed-refresh-token')).resolves.toEqual({
+      accessToken: 'signed-access-token',
+      refreshToken: rotated,
+    });
   });
 
   it('revokes the old token before issuing a new access token and a new refresh token', async () => {
@@ -312,7 +318,7 @@ describe('AuthService.refresh', () => {
     expect(refreshTokens.revoke).toHaveBeenCalledWith(verified);
     expect(users.findById).toHaveBeenCalledWith(row.id);
     expect(accessTokens.sign).toHaveBeenCalledWith({ userId: row.id });
-    expect(refreshTokens.issue).toHaveBeenCalledWith(row.id, 0);
+    expect(refreshTokens.issue).toHaveBeenCalledWith(row.id);
     const [revokeOrder] = refreshTokens.revoke.mock.invocationCallOrder;
     const [findOrder] = users.findById.mock.invocationCallOrder;
     const [issueOrder] = refreshTokens.issue.mock.invocationCallOrder;
@@ -348,14 +354,13 @@ describe('AuthService.changePassword', () => {
     newPassword: 'nouveaumotdepasse456',
   };
 
-  it('changes the password, then issues a refresh token with the new token version for the current session', async () => {
+  it('changes the password, then issues a refresh token for the current session', async () => {
     const { service, users, refreshTokens, accessTokens } = setup();
-    users.changePassword.mockResolvedValue({ ...row, tokenVersion: 1 });
 
     await expect(service.changePassword(row.id, body)).resolves.toBe(issued);
 
     expect(users.changePassword).toHaveBeenCalledWith(row.id, body);
-    expect(refreshTokens.issue).toHaveBeenCalledWith(row.id, 1);
+    expect(refreshTokens.issue).toHaveBeenCalledWith(row.id);
     expect(users.changePassword.mock.invocationCallOrder[0]).toBeLessThan(
       refreshTokens.issue.mock.invocationCallOrder[0],
     );

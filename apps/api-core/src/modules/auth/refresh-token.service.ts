@@ -20,9 +20,8 @@ export interface IssuedRefreshToken {
 export interface VerifiedRefreshToken {
   userId: string;
   jti: string;
+  issuedAt: Date;
   expiresAt: Date;
-  /** `tokenVersion` de l'utilisateur à l'émission : le token ne vaut plus rien si elle a changé depuis. */
-  tokenVersion: number;
 }
 
 @Injectable()
@@ -51,15 +50,15 @@ export class RefreshTokenService {
     });
   }
 
-  issue(userId: string, tokenVersion: number): IssuedRefreshToken {
+  issue(userId: string): IssuedRefreshToken {
     const jti = randomUUID();
-    const token = this.signer.sign({ sub: userId, jti, ver: tokenVersion });
+    const token = this.signer.sign({ sub: userId, jti });
     const { exp } = decodePayload(token);
     return { token, jti, expiresAt: new Date(exp * 1000) };
   }
 
   async verify(token: string): Promise<VerifiedRefreshToken> {
-    let claims: { sub?: unknown; jti?: unknown; exp?: unknown; ver?: unknown };
+    let claims: { sub?: unknown; jti?: unknown; iat?: unknown; exp?: unknown };
     try {
       claims = await this.verifier.verify(token);
     } catch (error) {
@@ -68,23 +67,22 @@ export class RefreshTokenService {
       }
       throw error;
     }
-    const { sub, jti, exp, ver } = claims;
+    const { sub, jti, iat, exp } = claims;
     if (
       typeof sub !== 'string' ||
       sub === '' ||
       typeof jti !== 'string' ||
       jti === '' ||
-      typeof exp !== 'number' ||
-      !Number.isSafeInteger(ver) ||
-      (ver as number) < 0
+      typeof iat !== 'number' ||
+      typeof exp !== 'number'
     ) {
       throw invalidRefreshToken();
     }
     return {
       userId: sub,
       jti,
+      issuedAt: new Date(iat * 1000),
       expiresAt: new Date(exp * 1000),
-      tokenVersion: ver as number,
     };
   }
 

@@ -74,6 +74,8 @@ services:
       SMTP_STARTTLS: opportunistic
       MAIL_FROM: EventHub <no-reply@eventhub.local>
       WEB_URL: http://localhost:3000
+      # Le front relaie les appels du navigateur : un proxy de confiance devant l'API.
+      TRUSTED_PROXY_HOPS: 1
     depends_on:
       mailpit:
         condition: service_started

@@ -1,5 +1,5 @@
 {
-  "id": "e8220d01-8605-4f13-accc-487fb6d6d55d",
+  "id": "42b6a13e-0724-44da-9e29-26b9b1ffb6a4",
   "prevId": "90ec25d1-7a3b-4271-b82e-e29468b4f198",
   "version": "7",
   "dialect": "postgresql",
@@ -338,12 +338,11 @@
           "primaryKey": false,
           "notNull": true
         },
-        "token_version": {
-          "name": "token_version",
-          "type": "integer",
+        "refresh_tokens_revoked_at": {
+          "name": "refresh_tokens_revoked_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",

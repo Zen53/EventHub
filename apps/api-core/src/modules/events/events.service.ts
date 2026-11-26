@@ -5,7 +5,6 @@ import type {
 } from '@eventhub/schemas';
 import { Injectable } from '@nestjs/common';
 import { AppError } from '../../core/errors/app-error.js';
-import { UsersService } from '../users/index.js';
 import { EventsRepository } from './events.repository.js';
 import type { EventDetailRow, EventSummaryRow } from './events.schema.js';
 
@@ -16,10 +15,7 @@ export interface UpcomingEvents {
 
 @Injectable()
 export class EventsService {
-  constructor(
-    private readonly repository: EventsRepository,
-    private readonly users: UsersService,
-  ) {}
+  constructor(private readonly repository: EventsRepository) {}
 
   async listUpcoming({
     page,
@@ -51,11 +47,6 @@ export class EventsService {
     organizerId: string,
     body: CreateEventBody,
   ): Promise<EventDetailRow> {
-    // Un access token reste valide 15 minutes : un compte supprimé entre-temps
-    // ne doit plus pouvoir publier d'événement.
-    if (!(await this.users.findById(organizerId))) {
-      throw new AppError('UNAUTHORIZED');
-    }
     const row = await this.repository.insert({
       title: body.title,
       description: body.description,

@@ -20,16 +20,25 @@ describe('envSchema', () => {
     ).toEqual({
       NODE_ENV: 'production',
       PORT: 8080,
+      TRUSTED_PROXY_HOPS: 0,
       ...required,
     });
   });
 
-  it('applies defaults when NODE_ENV and PORT are missing', () => {
+  it('applies defaults when NODE_ENV, PORT and TRUSTED_PROXY_HOPS are missing', () => {
     expect(envSchema.parse(required)).toEqual({
       NODE_ENV: 'development',
       PORT: 3001,
+      TRUSTED_PROXY_HOPS: 0,
       ...required,
     });
+  });
+
+  it('coerces TRUSTED_PROXY_HOPS to a number', () => {
+    expect(
+      envSchema.parse({ ...required, TRUSTED_PROXY_HOPS: '1' })
+        .TRUSTED_PROXY_HOPS,
+    ).toBe(1);
   });
 
   it.each([
@@ -37,6 +46,9 @@ describe('envSchema', () => {
     { PORT: 'abc' },
     { PORT: '0' },
     { PORT: '70000' },
+    { TRUSTED_PROXY_HOPS: '-1' },
+    { TRUSTED_PROXY_HOPS: '1.5' },
+    { TRUSTED_PROXY_HOPS: 'true' },
   ])('rejects %o', (env) => {
     expect(envSchema.safeParse({ ...required, ...env }).success).toBe(false);
   });

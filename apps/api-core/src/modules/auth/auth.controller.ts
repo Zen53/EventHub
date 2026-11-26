@@ -16,11 +16,14 @@ import {
   refreshResponseSchema,
   type RegisterBody,
   registerBodySchema,
+  type ResetPasswordBody,
+  resetPasswordBodySchema,
   userSchema,
 } from '@eventhub/schemas';
 import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { ApiEndpoint } from '../../core/openapi/api-endpoint.js';
+import { RateLimit } from '../../core/rate-limit/index.js';
 import { Public } from '../../core/security/index.js';
 import { toUserResponse } from '../users/index.js';
 import { AuthService, isInvalidRefreshToken } from './auth.service.js';
@@ -32,6 +35,10 @@ import {
   clearRefreshTokenCookieHeader,
   setRefreshTokenCookieHeader,
 } from './refresh-token.cookie.js';
+
+const ONE_MINUTE_MS = 60 * 1000;
+export const FORGOT_PASSWORD_RATE_LIMIT = { limit: 5, windowMs: ONE_MINUTE_MS };
+export const RESET_PASSWORD_RATE_LIMIT = { limit: 10, windowMs: ONE_MINUTE_MS };
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -119,9 +126,11 @@ export class AuthController {
   }
 
   @Public()
+  @RateLimit(FORGOT_PASSWORD_RATE_LIMIT)
   @ApiEndpoint('Demander la réinitialisation du mot de passe', {
     description:
-      'Envoie par email un lien de réinitialisation valable 1 heure, qui invalide les liens précédents. Répond 204 que l’email ait un compte ou non.',
+      'Envoie par email un lien de réinitialisation valable 1 heure, qui invalide les liens précédents. Répond 204 que l’email ait un compte ou non. Un même compte reçoit au plus un email par minute, et une même adresse IP est limitée à 5 demandes par minute.',
+    errors: ['TOO_MANY_REQUESTS'],
   })
   @Post('forgot-password')
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -129,6 +138,21 @@ export class AuthController {
     @Body({ schema: forgotPasswordBodySchema }) body: ForgotPasswordBody,
   ): Promise<void> {
     await this.passwordResets.request(body.email);
+  }
+
+  @Public()
+  @RateLimit(RESET_PASSWORD_RATE_LIMIT)
+  @ApiEndpoint('Choisir un nouveau mot de passe', {
+    description:
+      'Change le mot de passe avec le jeton reçu par email, qui ne sert qu’une fois, et invalide tous les access tokens et refresh tokens de l’utilisateur. Une même adresse IP est limitée à 10 essais par minute.',
+    errors: ['INVALID_RESET_TOKEN', 'TOO_MANY_REQUESTS'],
+  })
+  @Post('reset-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async resetPassword(
+    @Body({ schema: resetPasswordBodySchema }) body: ResetPasswordBody,
+  ): Promise<void> {
+    await this.passwordResets.reset(body.token, body.newPassword);
   }
 }
 

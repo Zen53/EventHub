@@ -4,5 +4,7 @@ import type * as schema from './schema.js';
 
 export type Database = PostgresJsDatabase<typeof schema>;
 
+export type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
+
 export const InjectDatabase = (): PropertyDecorator & ParameterDecorator =>
   InjectDrizzle();

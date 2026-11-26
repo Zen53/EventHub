@@ -1,7 +1,11 @@
 import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
-import type { Database } from '../../core/database/index.js';
-import { isEmailConflict, UsersRepository } from './users.repository.js';
+import type { Database, Transaction } from '../../core/database/index.js';
+import {
+  isEmailConflict,
+  revocationInstant,
+  UsersRepository,
+} from './users.repository.js';
 import { type UserRow, users } from './users.schema.js';
 
 const dialect = new PgDialect();
@@ -52,47 +56,31 @@ describe('UsersRepository.update', () => {
   });
 });
 
-describe('UsersRepository.incrementTokenVersion', () => {
-  it('increments token_version in the database and returns the new version', async () => {
-    const { repository, db, updateQuery } = setup();
-    updateQuery.returning.mockResolvedValue([{ tokenVersion: 3 }]);
-
-    await expect(repository.incrementTokenVersion(row.id)).resolves.toBe(3);
-
-    expect(db.update).toHaveBeenCalledWith(users);
-    const [{ tokenVersion }] = updateQuery.set.mock.calls[0] as [
-      { tokenVersion: SQL },
-    ];
-    expect(render(tokenVersion).sql).toBe('"users"."token_version" + 1');
-    const [condition] = updateQuery.where.mock.calls[0] as [SQL];
-    expect(render(condition)).toMatchObject({
-      sql: '("users"."id" = $1 and "users"."deleted_at" is null)',
-      params: [row.id],
-    });
-  });
-
-  it('returns null when no user has this id', async () => {
-    const { repository, updateQuery } = setup();
-    updateQuery.returning.mockResolvedValue([]);
-
-    await expect(repository.incrementTokenVersion(row.id)).resolves.toBeNull();
-  });
-});
-
 describe('UsersRepository.updatePassword', () => {
-  it('sets the new hash and increments token_version in the same update', async () => {
+  const NOW = new Date('2026-11-25T10:00:00Z');
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('stores the new hash and revokes the tokens issued so far, in one statement', async () => {
     const { repository, db, updateQuery } = setup();
+    updateQuery.returning.mockResolvedValue([{ id: row.id }]);
 
     await expect(repository.updatePassword(row.id, 'new-hash')).resolves.toBe(
-      row,
+      true,
     );
 
-    expect(db.update).toHaveBeenCalledOnce();
-    const [{ passwordHash, tokenVersion }] = updateQuery.set.mock.calls[0] as [
-      { passwordHash: string; tokenVersion: SQL },
-    ];
-    expect(passwordHash).toBe('new-hash');
-    expect(render(tokenVersion).sql).toBe('"users"."token_version" + 1');
+    expect(db.update).toHaveBeenCalledTimes(1);
+    expect(updateQuery.set).toHaveBeenCalledWith({
+      passwordHash: 'new-hash',
+      tokensRevokedAt: NOW,
+    });
     const [condition] = updateQuery.where.mock.calls[0] as [SQL];
     expect(render(condition)).toMatchObject({
       sql: '("users"."id" = $1 and "users"."deleted_at" is null)',
@@ -100,13 +88,42 @@ describe('UsersRepository.updatePassword', () => {
     });
   });
 
-  it('returns null when no user has this id', async () => {
+  it('rounds the revocation down to the second, so a token issued right after stays valid', async () => {
+    vi.setSystemTime(new Date('2026-11-25T10:00:00.750Z'));
+    const { repository, updateQuery } = setup();
+
+    await repository.updatePassword(row.id, 'new-hash');
+
+    expect(updateQuery.set).toHaveBeenCalledWith({
+      passwordHash: 'new-hash',
+      tokensRevokedAt: new Date('2026-11-25T10:00:00.000Z'),
+    });
+  });
+
+  it('returns false when no user has this id', async () => {
     const { repository, updateQuery } = setup();
     updateQuery.returning.mockResolvedValue([]);
 
+    await expect(repository.updatePassword(row.id, 'new-hash')).resolves.toBe(
+      false,
+    );
+  });
+
+  it('runs in the given transaction instead of the database', async () => {
+    const { repository, db } = setup();
+    const transaction = setup();
+    transaction.updateQuery.returning.mockResolvedValue([{ id: row.id }]);
+
     await expect(
-      repository.updatePassword(row.id, 'new-hash'),
-    ).resolves.toBeNull();
+      repository.updatePassword(
+        row.id,
+        'new-hash',
+        transaction.db as unknown as Transaction,
+      ),
+    ).resolves.toBe(true);
+
+    expect(transaction.db.update).toHaveBeenCalledWith(users);
+    expect(db.update).not.toHaveBeenCalled();
   });
 });
 
@@ -147,6 +164,14 @@ describe('isEmailConflict', () => {
   );
 });
 
+describe('revocationInstant', () => {
+  it('rounds down to the second, like the iat of the tokens', () => {
+    expect(revocationInstant(Date.parse('2026-11-25T10:00:00.999Z'))).toEqual(
+      new Date('2026-11-25T10:00:00.000Z'),
+    );
+  });
+});
+
 describe('UsersRepository reads ignore deleted accounts (EV-81)', () => {
   function setupSelect(rows: UserRow[] = [row]) {
     const selectQuery = {
@@ -161,7 +186,7 @@ describe('UsersRepository reads ignore deleted accounts (EV-81)', () => {
     return { repository, selectQuery };
   }
 
-  it('finds a user by id only when the account is not deleted', async () => {
+  it('finds a user by id only when the account is not deleted, so its tokens are refused', async () => {
     const { repository, selectQuery } = setupSelect();
 
     await expect(repository.findById(row.id)).resolves.toBe(row);
@@ -173,7 +198,7 @@ describe('UsersRepository reads ignore deleted accounts (EV-81)', () => {
     });
   });
 
-  it('finds a user by email only when the account is not deleted, so a deleted account cannot log in', async () => {
+  it('finds a user by email only when the account is not deleted, so it cannot log in', async () => {
     const { repository, selectQuery } = setupSelect([]);
 
     await expect(
@@ -188,28 +213,68 @@ describe('UsersRepository reads ignore deleted accounts (EV-81)', () => {
   });
 });
 
+describe('UsersRepository.revokeTokens (EV-95)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-25T10:00:00.400Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('revokes every token issued before the current second, for an active account', async () => {
+    const { repository, updateQuery } = setup();
+    updateQuery.returning.mockResolvedValue([{ id: row.id }]);
+
+    await expect(repository.revokeTokens(row.id)).resolves.toBe(true);
+
+    expect(updateQuery.set).toHaveBeenCalledWith({
+      tokensRevokedAt: new Date('2026-11-25T10:00:00.000Z'),
+    });
+    const [condition] = updateQuery.where.mock.calls[0] as [SQL];
+    expect(render(condition)).toMatchObject({
+      sql: '("users"."id" = $1 and "users"."deleted_at" is null)',
+      params: [row.id],
+    });
+  });
+
+  it('returns false for an unknown or deleted account', async () => {
+    const { repository, updateQuery } = setup();
+    updateQuery.returning.mockResolvedValue([]);
+
+    await expect(repository.revokeTokens(row.id)).resolves.toBe(false);
+  });
+});
+
 describe('UsersRepository.anonymize (EV-83)', () => {
-  it('anonymizes the active account in one update and invalidates its sessions', async () => {
+  const NOW = new Date('2026-11-25T10:00:00.400Z');
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('anonymizes the active account and revokes its tokens in one update', async () => {
     const { repository, db, updateQuery } = setup();
     updateQuery.returning.mockResolvedValue([{ id: row.id }]);
 
     await expect(repository.anonymize(row.id)).resolves.toBe(true);
 
     expect(db.update).toHaveBeenCalledOnce();
-    const [changes] = updateQuery.set.mock.calls[0] as [
-      Record<string, unknown>,
-    ];
-    expect(changes).toMatchObject({
+    expect(updateQuery.set).toHaveBeenCalledWith({
       email: `deleted-${row.id}@eventhub.invalid`,
       firstName: 'Utilisateur',
       lastName: 'supprimé',
       phone: null,
       passwordHash: '',
+      tokensRevokedAt: new Date('2026-11-25T10:00:00.000Z'),
+      deletedAt: NOW,
     });
-    expect(render(changes.tokenVersion as SQL).sql).toBe(
-      '"users"."token_version" + 1',
-    );
-    expect(render(changes.deletedAt as SQL).sql).toBe('now()');
     const [condition] = updateQuery.where.mock.calls[0] as [SQL];
     expect(render(condition)).toMatchObject({
       sql: '("users"."id" = $1 and "users"."deleted_at" is null)',

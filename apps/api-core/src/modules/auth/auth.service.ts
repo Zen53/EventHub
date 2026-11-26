@@ -6,7 +6,11 @@ import type {
 } from '@eventhub/schemas';
 import { AppError } from '../../core/errors/app-error.js';
 import { AccessTokenService } from '../../core/security/index.js';
-import { type UserRow, UsersService } from '../users/index.js';
+import {
+  isIssuedBeforeRevocation,
+  type UserRow,
+  UsersService,
+} from '../users/index.js';
 import {
   type IssuedRefreshToken,
   RefreshTokenService,
@@ -39,20 +43,22 @@ export class AuthService {
       throw new AppError('INVALID_CREDENTIALS');
     }
     const accessToken = this.accessTokens.sign({ userId: user.id });
-    const refreshToken = this.refreshTokens.issue(user.id, user.tokenVersion);
+    const refreshToken = this.refreshTokens.issue(user.id);
     return { accessToken, refreshToken, user };
   }
 
   /**
-   * Change le mot de passe : toutes les sessions sont invalidées, et la session
-   * en cours reçoit un nouveau refresh token pour rester connectée.
+   * Change le mot de passe : tous les tokens de l'utilisateur sont invalidés,
+   * et la session en cours reçoit un nouveau refresh token pour rester
+   * connectée (son access token, révoqué lui aussi, se renouvelle au prochain
+   * 401 avec POST /auth/refresh).
    */
   async changePassword(
     userId: string,
     body: ChangePasswordBody,
   ): Promise<IssuedRefreshToken> {
-    const user = await this.users.changePassword(userId, body);
-    return this.refreshTokens.issue(user.id, user.tokenVersion);
+    await this.users.changePassword(userId, body);
+    return this.refreshTokens.issue(userId);
   }
 
   async logout(token: string | undefined): Promise<void> {
@@ -81,12 +87,11 @@ export class AuthService {
       throw invalidRefreshToken();
     }
     const user = await this.users.findById(verified.userId);
-    // Version différente : les sessions ont été invalidées depuis l'émission (EV-95).
-    if (!user || user.tokenVersion !== verified.tokenVersion) {
+    if (!user || isIssuedBeforeRevocation(verified.issuedAt, user)) {
       throw invalidRefreshToken();
     }
     const accessToken = this.accessTokens.sign({ userId: user.id });
-    const refreshToken = this.refreshTokens.issue(user.id, user.tokenVersion);
+    const refreshToken = this.refreshTokens.issue(user.id);
     return { accessToken, refreshToken };
   }
 }

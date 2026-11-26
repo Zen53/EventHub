@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { and, eq, isNull, sql } from 'drizzle-orm';
-import { type Database, InjectDatabase } from '../../core/database/index.js';
+import { and, eq, isNull } from 'drizzle-orm';
+import {
+  type Database,
+  InjectDatabase,
+  type Transaction,
+} from '../../core/database/index.js';
 import { type NewUserRow, type UserRow, users } from './users.schema.js';
 
 export type UserProfileChanges = Partial<
@@ -69,27 +73,27 @@ export class UsersRepository {
     return row ?? null;
   }
 
-  /** Invalide toutes les sessions de l'utilisateur, et renvoie la nouvelle version. */
-  async incrementTokenVersion(id: string): Promise<number | null> {
-    const [row] = await this.db
-      .update(users)
-      .set({ tokenVersion: nextTokenVersion })
-      .where(activeUser(id))
-      .returning({ tokenVersion: users.tokenVersion });
-    return row?.tokenVersion ?? null;
-  }
-
-  /** Change le mot de passe et invalide toutes les sessions, en une seule écriture. */
   async updatePassword(
     id: string,
     passwordHash: string,
-  ): Promise<UserRow | null> {
-    const [row] = await this.db
+    executor: Database | Transaction = this.db,
+  ): Promise<boolean> {
+    const rows = await executor
       .update(users)
-      .set({ passwordHash, tokenVersion: nextTokenVersion })
+      .set({ passwordHash, tokensRevokedAt: revocationInstant() })
       .where(activeUser(id))
-      .returning();
-    return row ?? null;
+      .returning({ id: users.id });
+    return rows.length > 0;
+  }
+
+  /** Invalide toutes les sessions de l'utilisateur (EV-95) : tokens refusés s'ils sont émis avant cet instant. */
+  async revokeTokens(id: string): Promise<boolean> {
+    const rows = await this.db
+      .update(users)
+      .set({ tokensRevokedAt: revocationInstant() })
+      .where(activeUser(id))
+      .returning({ id: users.id });
+    return rows.length > 0;
   }
 
   /**
@@ -107,8 +111,8 @@ export class UsersRepository {
         lastName: ANONYMOUS_LAST_NAME,
         phone: null,
         passwordHash: ERASED_PASSWORD_HASH,
-        tokenVersion: nextTokenVersion,
-        deletedAt: sql`now()`,
+        tokensRevokedAt: revocationInstant(),
+        deletedAt: new Date(),
       })
       .where(activeUser(id))
       .returning({ id: users.id });
@@ -123,9 +127,15 @@ export const ANONYMOUS_LAST_NAME = 'supprimé';
 /** Aucun mot de passe ne correspond à un hash vide : argon2 le refuse. */
 export const ERASED_PASSWORD_HASH = '';
 
+/**
+ * Instant de révocation arrondi à la seconde : les tokens portent un `iat` en
+ * secondes. Sans l'arrondi, un token émis juste après la révocation, dans la
+ * même seconde, serait refusé (par exemple celui de la session en cours après
+ * un changement de mot de passe).
+ */
+export const revocationInstant = (now = Date.now()): Date =>
+  new Date(Math.floor(now / 1000) * 1000);
+
 // Un compte supprimé est invisible : ni lecture, ni écriture, ni connexion (EV-81).
 const activeUser = (id: string) =>
   and(eq(users.id, id), isNull(users.deletedAt));
-
-// Incrément atomique côté base : deux révocations simultanées ne se perdent pas.
-const nextTokenVersion = sql`${users.tokenVersion} + 1`;

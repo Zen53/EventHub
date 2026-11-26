@@ -13,7 +13,6 @@ import type { RevokedRefreshTokensRepository } from './revoked-refresh-tokens.re
 
 const SECRET = 'test-only-access-secret-of-32-chars!';
 const USER_ID = 'a1b2c3d4-0000-4000-8000-000000000002';
-const TOKEN_VERSION = 2;
 const NOW = new Date('2026-11-13T10:00:00Z');
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -61,7 +60,6 @@ const validClaims = () => {
     aud: REFRESH_TOKEN_AUDIENCE,
     iat,
     exp: iat + 60,
-    ver: TOKEN_VERSION,
   };
 };
 
@@ -83,7 +81,7 @@ describe('RefreshTokenService', () => {
 
   describe('issue', () => {
     it('signs an HS256 JWT with sub, a UUID jti, the refresh audience and the shared issuer', () => {
-      const { token, jti } = refreshService().issue(USER_ID, TOKEN_VERSION);
+      const { token, jti } = refreshService().issue(USER_ID);
       const [header, payload] = token.split('.').slice(0, 2).map(decode);
 
       expect(header.alg).toBe('HS256');
@@ -91,17 +89,13 @@ describe('RefreshTokenService', () => {
       expect(payload).toMatchObject({
         sub: USER_ID,
         jti,
-        ver: TOKEN_VERSION,
         iss: 'eventhub-api',
         aud: 'eventhub-refresh',
       });
     });
 
     it('expires 7 days after issuance', () => {
-      const { token, expiresAt } = refreshService().issue(
-        USER_ID,
-        TOKEN_VERSION,
-      );
+      const { token, expiresAt } = refreshService().issue(USER_ID);
       const payload = decode(token.split('.')[1]);
 
       expect(REFRESH_TOKEN_TTL_MS).toBe(7 * 24 * 60 * 60 * 1000);
@@ -113,8 +107,8 @@ describe('RefreshTokenService', () => {
     it('uses a different jti and token on each issuance', () => {
       const service = refreshService();
 
-      const first = service.issue(USER_ID, TOKEN_VERSION);
-      const second = service.issue(USER_ID, TOKEN_VERSION);
+      const first = service.issue(USER_ID);
+      const second = service.issue(USER_ID);
 
       expect(first.jti).not.toBe(second.jti);
       expect(first.token).not.toBe(second.token);
@@ -122,24 +116,16 @@ describe('RefreshTokenService', () => {
   });
 
   describe('verify', () => {
-    it('returns the userId, jti, expiration and token version of an issued token', async () => {
+    it('returns the userId, jti and expiration of an issued token', async () => {
       const service = refreshService();
-      const issued = service.issue(USER_ID, TOKEN_VERSION);
+      const issued = service.issue(USER_ID);
 
       await expect(service.verify(issued.token)).resolves.toEqual({
         userId: USER_ID,
         jti: issued.jti,
+        issuedAt: new Date(issued.expiresAt.getTime() - REFRESH_TOKEN_TTL_MS),
         expiresAt: issued.expiresAt,
-        tokenVersion: TOKEN_VERSION,
       });
-    });
-
-    it('accepts the initial token version 0', async () => {
-      const service = refreshService();
-
-      await expect(
-        service.verify(service.issue(USER_ID, 0).token),
-      ).resolves.toMatchObject({ tokenVersion: 0 });
     });
 
     it('refuses an access token signed with the same secret', async () => {
@@ -151,7 +137,7 @@ describe('RefreshTokenService', () => {
     });
 
     it('is refused by the access token verifier', async () => {
-      const { token } = refreshService().issue(USER_ID, TOKEN_VERSION);
+      const { token } = refreshService().issue(USER_ID);
       const error = await new AccessTokenService(configWith(SECRET))
         .verify(token)
         .catch((e: unknown) => e);
@@ -161,7 +147,7 @@ describe('RefreshTokenService', () => {
 
     it('refuses an expired token', async () => {
       const service = refreshService();
-      const { token } = service.issue(USER_ID, TOKEN_VERSION);
+      const { token } = service.issue(USER_ID);
 
       vi.advanceTimersByTime(REFRESH_TOKEN_TTL_MS + 1000);
 
@@ -170,7 +156,7 @@ describe('RefreshTokenService', () => {
 
     it('accepts a token just before it expires', async () => {
       const service = refreshService();
-      const { token } = service.issue(USER_ID, TOKEN_VERSION);
+      const { token } = service.issue(USER_ID);
 
       vi.advanceTimersByTime(REFRESH_TOKEN_TTL_MS - 1000);
 
@@ -181,7 +167,7 @@ describe('RefreshTokenService', () => {
 
     it('refuses a token whose payload was altered', async () => {
       const [header, , signature] = refreshService()
-        .issue(USER_ID, TOKEN_VERSION)
+        .issue(USER_ID)
         .token.split('.');
       const forged = base64url({ ...validClaims(), sub: 'someone-else' });
 
@@ -191,7 +177,7 @@ describe('RefreshTokenService', () => {
     });
 
     it('refuses a token whose signature was altered', async () => {
-      const { token } = refreshService().issue(USER_ID, TOKEN_VERSION);
+      const { token } = refreshService().issue(USER_ID);
       const last = token.at(-1) === 'A' ? 'B' : 'A';
 
       await expectInvalidRefreshToken(
@@ -202,7 +188,7 @@ describe('RefreshTokenService', () => {
     it('refuses a token signed with another secret', async () => {
       const { token } = refreshService(
         'another-test-secret-of-32-chars!!!',
-      ).issue(USER_ID, TOKEN_VERSION);
+      ).issue(USER_ID);
 
       await expectInvalidRefreshToken(refreshService().verify(token));
     });
@@ -230,15 +216,6 @@ describe('RefreshTokenService', () => {
       await expectInvalidRefreshToken(refreshService().verify(token));
     });
 
-    it('accepts a hand-made token carrying every required claim', async () => {
-      await expect(
-        refreshService().verify(handMade(validClaims())),
-      ).resolves.toMatchObject({
-        userId: USER_ID,
-        tokenVersion: TOKEN_VERSION,
-      });
-    });
-
     it.each([
       ['without jti', { jti: undefined }],
       ['with an empty jti', { jti: '' }],
@@ -247,10 +224,6 @@ describe('RefreshTokenService', () => {
       ['without sub', { sub: undefined }],
       ['with an empty sub', { sub: '' }],
       ['with a non-string sub', { sub: 42 }],
-      ['without ver, as issued before EV-95', { ver: undefined }],
-      ['with a non-integer ver', { ver: 1.5 }],
-      ['with a negative ver', { ver: -1 }],
-      ['with a string ver', { ver: '2' }],
     ])('refuses a correctly signed token %s', async (_, override) => {
       await expectInvalidRefreshToken(
         refreshService().verify(handMade({ ...validClaims(), ...override })),
@@ -262,8 +235,8 @@ describe('RefreshTokenService', () => {
     const verified = {
       userId: USER_ID,
       jti: 'c1b2c3d4-0000-4000-8000-000000000003',
+      issuedAt: new Date('2026-11-13T10:00:00Z'),
       expiresAt: new Date('2026-11-20T10:00:00Z'),
-      tokenVersion: TOKEN_VERSION,
     };
 
     it('revokes the jti until its expiration and returns whether it was newly revoked', async () => {
@@ -293,7 +266,7 @@ describe('RefreshTokenService', () => {
       const revoked = revokedRepository();
       const service = refreshService(SECRET, revoked);
 
-      await service.verify(service.issue(USER_ID, TOKEN_VERSION).token);
+      await service.verify(service.issue(USER_ID).token);
 
       expect(revoked.isRevoked).not.toHaveBeenCalled();
     });

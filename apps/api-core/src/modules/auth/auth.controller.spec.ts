@@ -1,5 +1,6 @@
 import { HttpStatus, RequestMethod } from '@nestjs/common';
 import {
+  GUARDS_METADATA,
   HTTP_CODE_METADATA,
   METHOD_METADATA,
   PATH_METADATA,
@@ -10,9 +11,11 @@ import {
   forgotPasswordBodySchema,
   loginBodySchema,
   registerBodySchema,
+  resetPasswordBodySchema,
 } from '@eventhub/schemas';
 import type { Request, Response } from 'express';
 import { AppError } from '../../core/errors/app-error.js';
+import { RateLimitGuard } from '../../core/rate-limit/index.js';
 import { Public } from '../../core/security/index.js';
 import { createValidationPipe } from '../../core/validation/validation.pipe.js';
 import type { UserRow } from '../users/index.js';
@@ -27,7 +30,7 @@ const row: UserRow = {
   lastName: 'Durand',
   phone: '+33612345678',
   passwordHash: 'stored-hash',
-  tokenVersion: 0,
+  tokensRevokedAt: null,
   deletedAt: null,
   createdAt: new Date('2026-11-13T10:00:00Z'),
   updatedAt: new Date('2026-11-13T10:00:00Z'),
@@ -41,7 +44,13 @@ const body = {
   phone: '+33612345678',
 };
 
-type Route = 'register' | 'login' | 'logout' | 'refresh' | 'forgotPassword';
+type Route =
+  | 'register'
+  | 'login'
+  | 'logout'
+  | 'refresh'
+  | 'forgotPassword'
+  | 'resetPassword';
 
 const handlerOf = (name: Route) =>
   Object.getOwnPropertyDescriptor(AuthController.prototype, name)
@@ -75,7 +84,10 @@ function setup() {
     logout: vi.fn().mockResolvedValue(undefined),
     refresh: vi.fn().mockResolvedValue(refreshResult),
   };
-  const passwordResets = { request: vi.fn().mockResolvedValue(undefined) };
+  const passwordResets = {
+    request: vi.fn().mockResolvedValue(undefined),
+    reset: vi.fn().mockResolvedValue(undefined),
+  };
   const controller = new AuthController(
     auth as unknown as AuthService,
     passwordResets as unknown as PasswordResetService,
@@ -93,9 +105,20 @@ function routeArgs(name: Route) {
 }
 
 function bodySchema(
-  name: 'register' | 'login' | 'forgotPassword' = 'register',
+  name: 'register' | 'login' | 'forgotPassword' | 'resetPassword' = 'register',
 ) {
   return routeArgs(name).find((arg) => arg.index === 0)?.schema;
+}
+
+function rateLimitOf(routeHandler: object) {
+  return {
+    guards: Reflect.getMetadata(GUARDS_METADATA, routeHandler) as unknown,
+    limit: Reflect.getMetadata(
+      'THROTTLER:LIMITdefault',
+      routeHandler,
+    ) as unknown,
+    ttl: Reflect.getMetadata('THROTTLER:TTLdefault', routeHandler) as unknown,
+  };
 }
 
 function publicKey() {
@@ -519,6 +542,14 @@ describe('AuthController.forgotPassword', () => {
     expect(Reflect.getMetadata(publicKey(), forgotPassword)).toBe(true);
   });
 
+  it('limits each IP address to 5 requests per minute', () => {
+    expect(rateLimitOf(forgotPassword)).toEqual({
+      guards: [RateLimitGuard],
+      limit: 5,
+      ttl: 60 * 1000,
+    });
+  });
+
   it('validates the body with forgotPasswordBodySchema', () => {
     expect(bodySchema('forgotPassword')).toBe(forgotPasswordBodySchema);
   });
@@ -530,5 +561,56 @@ describe('AuthController.forgotPassword', () => {
       controller.forgotPassword({ email: 'camille@exemple.fr' }),
     ).resolves.toBeUndefined();
     expect(passwordResets.request).toHaveBeenCalledWith('camille@exemple.fr');
+  });
+});
+
+describe('AuthController.resetPassword', () => {
+  const resetPassword = handlerOf('resetPassword');
+  const resetBody = {
+    token: 'reset-token',
+    newPassword: 'nouveaumotdepasse456',
+  };
+
+  it('is mounted on POST /auth/reset-password, public, and answers 204', () => {
+    expect(Reflect.getMetadata(PATH_METADATA, resetPassword)).toBe(
+      'reset-password',
+    );
+    expect(Reflect.getMetadata(METHOD_METADATA, resetPassword)).toBe(
+      RequestMethod.POST,
+    );
+    expect(Reflect.getMetadata(HTTP_CODE_METADATA, resetPassword)).toBe(
+      HttpStatus.NO_CONTENT,
+    );
+    expect(Reflect.getMetadata(publicKey(), resetPassword)).toBe(true);
+  });
+
+  it('limits each IP address to 10 requests per minute', () => {
+    expect(rateLimitOf(resetPassword)).toEqual({
+      guards: [RateLimitGuard],
+      limit: 10,
+      ttl: 60 * 1000,
+    });
+  });
+
+  it('validates the body with resetPasswordBodySchema', () => {
+    expect(bodySchema('resetPassword')).toBe(resetPasswordBodySchema);
+  });
+
+  it('resets the password with the token and returns no body', async () => {
+    const { controller, passwordResets } = setup();
+
+    await expect(controller.resetPassword(resetBody)).resolves.toBeUndefined();
+    expect(passwordResets.reset).toHaveBeenCalledWith(
+      'reset-token',
+      'nouveaumotdepasse456',
+    );
+  });
+
+  it('propagates 400 INVALID_RESET_TOKEN as is', async () => {
+    const { controller, passwordResets } = setup();
+    const error = new AppError('INVALID_RESET_TOKEN');
+    passwordResets.reset.mockRejectedValue(error);
+
+    await expect(controller.resetPassword(resetBody)).rejects.toBe(error);
   });
 });

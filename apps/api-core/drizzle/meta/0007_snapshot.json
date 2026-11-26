@@ -1,6 +1,6 @@
 {
-  "id": "4ac52418-5d0d-455c-9018-137dae52617c",
-  "prevId": "e8220d01-8605-4f13-accc-487fb6d6d55d",
+  "id": "a4a80894-505e-4550-81a1-64ebc44717b0",
+  "prevId": "42b6a13e-0724-44da-9e29-26b9b1ffb6a4",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -338,15 +338,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "token_version": {
-          "name": "token_version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "deleted_at": {
-          "name": "deleted_at",
+        "tokens_revoked_at": {
+          "name": "tokens_revoked_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false

@@ -1,4 +1,6 @@
 import { MODULE_METADATA } from '@nestjs/common/constants.js';
+import { APP_GUARD } from '@nestjs/core';
+import { AccessTokenGuard } from '../../core/security/index.js';
 import { EventsModule } from '../events/index.js';
 import { UsersModule } from '../users/index.js';
 import { AccountController } from './account.controller.js';
@@ -31,5 +33,11 @@ describe('AuthModule', () => {
         AccountService,
       ]),
     );
+  });
+
+  it('registers AccessTokenGuard as the global guard', () => {
+    expect(
+      Reflect.getMetadata(MODULE_METADATA.PROVIDERS, AuthModule),
+    ).toContainEqual({ provide: APP_GUARD, useClass: AccessTokenGuard });
   });
 });

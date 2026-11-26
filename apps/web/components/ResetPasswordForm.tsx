@@ -1,11 +1,18 @@
 "use client";
 
-import { passwordSchema } from "@eventhub/schemas";
+import {
+  errorResponseSchema,
+  passwordSchema,
+  resetPasswordBodySchema,
+} from "@eventhub/schemas";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
+const genericError = "Enregistrement impossible pour le moment.";
+
 export default function ResetPasswordForm() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get("token")?.trim() ?? "";
 
@@ -15,10 +22,13 @@ export default function ResetPasswordForm() {
     password?: string;
     confirmPassword?: string;
   }>({});
-  const [done, setDone] = useState(false);
+  const [formError, setFormError] = useState<string>();
+  const [submitting, setSubmitting] = useState(false);
+  const [invalidToken, setInvalidToken] = useState(false);
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setFormError(undefined);
 
     const nextErrors: { password?: string; confirmPassword?: string } = {};
     const passwordResult = passwordSchema.safeParse(password);
@@ -31,7 +41,10 @@ export default function ResetPasswordForm() {
 
     if (!confirmPassword) {
       nextErrors.confirmPassword = "Confirme ton mot de passe.";
-    } else if (passwordResult.success && confirmPassword !== passwordResult.data) {
+    } else if (
+      passwordResult.success &&
+      confirmPassword !== passwordResult.data
+    ) {
       nextErrors.confirmPassword = "Les mots de passe ne correspondent pas.";
     }
 
@@ -40,11 +53,71 @@ export default function ResetPasswordForm() {
       return;
     }
 
+    const bodyResult = resetPasswordBodySchema.safeParse({
+      token,
+      newPassword: passwordResult.data,
+    });
+
+    if (!bodyResult.success) {
+      const tokenIssue = bodyResult.error.issues.find((issue) =>
+        issue.path.includes("token"),
+      );
+      if (tokenIssue) {
+        setInvalidToken(true);
+        return;
+      }
+      setFormError(genericError);
+      return;
+    }
+
     setErrors({});
-    setDone(true);
+    setSubmitting(true);
+
+    try {
+      const response = await fetch("/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(bodyResult.data),
+      });
+
+      if (response.status === 204) {
+        router.replace("/connexion");
+        return;
+      }
+
+      const payload = errorResponseSchema.safeParse(await response.json());
+      if (!payload.success) {
+        setFormError(genericError);
+        return;
+      }
+
+      const { code, message, details } = payload.data.error;
+
+      if (code === "INVALID_RESET_TOKEN") {
+        setInvalidToken(true);
+        return;
+      }
+
+      if (code === "VALIDATION_ERROR") {
+        const passwordDetail = details?.find(
+          (detail) =>
+            detail.field === "newPassword" || detail.field === "password",
+        );
+        if (passwordDetail) {
+          setErrors({ password: passwordDetail.message });
+          return;
+        }
+      }
+
+      setFormError(message || genericError);
+    } catch {
+      setFormError(genericError);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  if (!token) {
+  if (!token || invalidToken) {
     return (
       <div className="flex flex-col gap-5">
         <div>
@@ -52,8 +125,8 @@ export default function ResetPasswordForm() {
             Lien invalide
           </h2>
           <p className="mt-2 text-sm leading-6 text-[#6d6258]">
-            Ce lien de réinitialisation est incomplet ou incorrect. Demande un
-            nouveau lien depuis la page mot de passe oublié.
+            Ce lien de réinitialisation est incomplet, expiré ou déjà utilisé.
+            Demande un nouveau lien depuis la page mot de passe oublié.
           </p>
         </div>
         <Link
@@ -67,30 +140,6 @@ export default function ResetPasswordForm() {
             Retour à la connexion
           </Link>
         </p>
-      </div>
-    );
-  }
-
-  if (done) {
-    return (
-      <div className="flex flex-col gap-5">
-        <div>
-          <p className="text-xs font-medium tracking-[0.28em] text-[#e24a1b]">
-            C’EST FAIT
-          </p>
-          <h2 className="mt-2 text-3xl font-semibold tracking-tight text-[#1a120e]">
-            Mot de passe mis à jour
-          </h2>
-          <p className="mt-2 text-sm leading-6 text-[#6d6258]">
-            Tu peux te reconnecter avec ton nouveau mot de passe.
-          </p>
-        </div>
-        <Link
-          href="/connexion"
-          className="flex h-12 items-center justify-center rounded-xl bg-[#e24a1b] text-sm font-semibold text-white transition hover:bg-[#c73d14]"
-        >
-          Se connecter
-        </Link>
       </div>
     );
   }
@@ -118,6 +167,7 @@ export default function ResetPasswordForm() {
           onChange={(event) => {
             setPassword(event.target.value);
             setErrors((current) => ({ ...current, password: undefined }));
+            setFormError(undefined);
           }}
           className={`h-12 rounded-xl border bg-white px-4 text-[#1a120e] outline-none transition focus:border-[#e24a1b] ${
             errors.password ? "border-[#c2410c]" : "border-[#e6dfd4]"
@@ -152,6 +202,7 @@ export default function ResetPasswordForm() {
               ...current,
               confirmPassword: undefined,
             }));
+            setFormError(undefined);
           }}
           className={`h-12 rounded-xl border bg-white px-4 text-[#1a120e] outline-none transition focus:border-[#e24a1b] ${
             errors.confirmPassword ? "border-[#c2410c]" : "border-[#e6dfd4]"
@@ -164,11 +215,21 @@ export default function ResetPasswordForm() {
         ) : null}
       </label>
 
+      {formError ? (
+        <p
+          role="alert"
+          className="rounded-2xl bg-[#fdecea] px-4 py-3 text-sm text-[#c2410c]"
+        >
+          {formError}
+        </p>
+      ) : null}
+
       <button
         type="submit"
-        className="mt-1 h-12 rounded-xl bg-[#e24a1b] text-sm font-semibold text-white transition hover:bg-[#c73d14]"
+        disabled={submitting}
+        className="mt-1 h-12 rounded-xl bg-[#e24a1b] text-sm font-semibold text-white transition hover:bg-[#c73d14] disabled:opacity-60"
       >
-        Enregistrer
+        {submitting ? "Enregistrement…" : "Enregistrer"}
       </button>
 
       <p className="text-center text-sm text-[#6d6258]">

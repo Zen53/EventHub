@@ -47,15 +47,22 @@
     {
       "idx": 6,
       "version": "7",
-      "when": 1795601293124,
-      "tag": "0006_users_token_version",
+      "when": 1795603402506,
+      "tag": "0006_users_refresh_tokens_revoked_at",
       "breakpoints": true
     },
     {
       "idx": 7,
       "version": "7",
-      "when": 1795604139248,
-      "tag": "0007_users_deleted_at",
+      "when": 1795700000000,
+      "tag": "0007_users_tokens_revoked_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1795687837723,
+      "tag": "0008_users_deleted_at",
       "breakpoints": true
     }
   ]

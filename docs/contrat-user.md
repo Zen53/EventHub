@@ -52,7 +52,8 @@ En base, il est stocké haché (bcrypt ou argon2) dans un champ `passwordHash`, 
 - Le front et le back sont servis sur le **même domaine**. Le navigateur envoie donc le cookie tout seul sur les appels à `/auth/*` : pas de configuration CORS, et `SameSite=Strict` fonctionne.
 - Quand l'access token expire, l'API répond `401 UNAUTHORIZED`. Le front appelle alors `POST /auth/refresh`, puis rejoue la requête.
 - À chaque refresh, le back émet un **nouveau** refresh token et invalide l'ancien (rotation).
-- **Invalider toutes les sessions** d'un utilisateur (changement ou réinitialisation du mot de passe, suppression du compte) : chaque utilisateur a une `tokenVersion`, recopiée dans ses refresh tokens. L'incrémenter rend tous ses refresh tokens refusés au prochain `POST /auth/refresh`. Côté back, c'est `UsersService.revokeAllSessions(userId)`.
+- Après une réinitialisation ou un changement du mot de passe, et après la suppression du compte, **tous** les tokens émis avant sont refusés : l'access token avec `401 UNAUTHORIZED`, le refresh token avec `401 INVALID_REFRESH_TOKEN`. Après une réinitialisation, l'utilisateur doit se reconnecter.
+- Côté back, c'est `users.tokens_revoked_at` : un token dont l'`iat` est antérieur est refusé. Pour invalider toutes les sessions d'un utilisateur, appeler `UsersService.revokeAllSessions(userId)`. L'instant de révocation est arrondi à la seconde, comme l'`iat` des tokens : un token émis juste après, dans la même seconde, reste valide.
 
 ## Endpoints d'authentification
 
@@ -156,7 +157,9 @@ En base, il est stocké haché (bcrypt ou argon2) dans un champ `passwordHash`, 
   - est une chaîne aléatoire d'au moins 32 octets, stockée **hachée** en base ;
   - est valable **1 heure** et ne sert **qu'une fois** ;
   - est invalidé si l'utilisateur fait une nouvelle demande.
-- **Erreurs** : `400 VALIDATION_ERROR` (email mal formé)
+- Un même compte reçoit **au plus un email par minute**. Une demande faite avant ce délai répond `204` comme les autres, sans nouvel email, et le lien déjà envoyé reste valable.
+- Une même adresse IP est limitée à **5 demandes par minute**. Au-delà, l'API répond `429 TOO_MANY_REQUESTS` avec l'en-tête `Retry-After` (secondes à attendre).
+- **Erreurs** : `400 VALIDATION_ERROR` (email mal formé), `429 TOO_MANY_REQUESTS`
 
 ### `POST /auth/reset-password` : choisir un nouveau mot de passe (sprint 2)
 
@@ -170,8 +173,10 @@ En base, il est stocké haché (bcrypt ou argon2) dans un champ `passwordHash`, 
 }
 ```
 
-- **Réponse `204`** : sans corps. Le mot de passe est changé, le `resetToken` est consommé, et **tous** les refresh tokens de l'utilisateur sont invalidés. Le front renvoie vers la page de connexion.
-- **Erreurs** : `400 VALIDATION_ERROR` (mot de passe hors règles), `400 INVALID_RESET_TOKEN` (inconnu, expiré ou déjà utilisé)
+- **Réponse `204`** : sans corps. Le mot de passe est changé, le `resetToken` est consommé, et **tous** les access tokens et refresh tokens de l'utilisateur sont invalidés. Le front renvoie vers la page de connexion.
+- Le `resetToken` n'est consommé que si le mot de passe a bien été changé : après une erreur `500`, le même lien reste utilisable.
+- Une même adresse IP est limitée à **10 essais par minute**. Au-delà, l'API répond `429 TOO_MANY_REQUESTS` avec l'en-tête `Retry-After` (secondes à attendre).
+- **Erreurs** : `400 VALIDATION_ERROR` (mot de passe hors règles), `400 INVALID_RESET_TOKEN` (inconnu, expiré ou déjà utilisé), `429 TOO_MANY_REQUESTS`
 
 ## Endpoints du profil
 
@@ -222,8 +227,8 @@ En base, il est stocké haché (bcrypt ou argon2) dans un champ `passwordHash`, 
 }
 ```
 
-- **Réponse `204`** : sans corps. Tous les refresh tokens de l'utilisateur sont invalidés, y compris celui de la session en cours, qui reçoit un **nouveau refresh token en cookie** et reste donc connectée. Les autres appareils sont déconnectés à l'expiration de leur access token (15 minutes au plus).
-- Les règles du nouveau mot de passe sont celles de l'inscription. L'ancien n'a pas à les respecter (il est seulement comparé au mot de passe enregistré).
+- **Réponse `204`** : sans corps. Tous les tokens de l'utilisateur sont invalidés, y compris ceux de la session en cours, qui reçoit un **nouveau refresh token en cookie** et reste donc connectée : son access token reçoit un `401` à la requête suivante, et le front le renouvelle avec `POST /auth/refresh` comme pour un token expiré. Les autres appareils sont déconnectés.
+- Les règles du nouveau mot de passe sont celles de l'inscription. L'ancien n'a pas à les respecter : il est seulement comparé au mot de passe enregistré.
 - **Erreurs** : `400 VALIDATION_ERROR`, `401 UNAUTHORIZED`, `403 WRONG_PASSWORD`
 
 ### `DELETE /me` : supprimer mon compte (sprint 2)
@@ -240,10 +245,10 @@ En base, il est stocké haché (bcrypt ou argon2) dans un champ `passwordHash`, 
 - **Refusée** tant que l'utilisateur organise des événements **à venir** au statut `published` : il doit d'abord les annuler (`409 ACCOUNT_HAS_UPCOMING_EVENTS`).
 - **Ce que fait le back** :
   1. Il **anonymise** le compte au lieu de supprimer la ligne, pour que les événements passés et les réservations gardent une référence valide : `email` remplacé par `deleted-<id>@eventhub.invalid`, `firstName` = `"Utilisateur"`, `lastName` = `"supprimé"`, `phone` = `null`, `passwordHash` vidé (chaîne vide, qu'aucun mot de passe ne peut vérifier), `deletedAt` renseigné.
-  2. Il invalide tous les refresh tokens de l'utilisateur (incrément de `tokenVersion`, dans le même `UPDATE`) et supprime le cookie.
+  2. Il invalide tous les tokens de l'utilisateur (`tokens_revoked_at`, dans le même `UPDATE`) et supprime le cookie.
   3. _(à partir du sprint 5)_ Il annule les réservations de l'utilisateur pour les événements à venir.
 - L'email d'origine est libéré : il peut servir à créer un nouveau compte.
-- Un compte anonymisé ne peut plus se connecter, et le back le traite comme inexistant : un access token encore valide (15 minutes au plus) reçoit `401 UNAUTHORIZED` sur `GET /me`, `PATCH /me`, `PATCH /me/password` et `POST /events`.
+- Un compte anonymisé ne peut plus se connecter, et le back le traite comme inexistant : un access token encore valide reçoit `401 UNAUTHORIZED` sur toutes les routes protégées.
 - Le mot de passe est vérifié avant les événements, pour ne rien révéler sans lui.
 - **Réponse `204`** : sans corps. Le front supprime l'access token et renvoie vers l'accueil.
 - **Erreurs** : `400 VALIDATION_ERROR`, `401 UNAUTHORIZED`, `403 WRONG_PASSWORD`, `409 ACCOUNT_HAS_UPCOMING_EVENTS`

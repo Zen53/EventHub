@@ -46,11 +46,15 @@ describe('AccessTokenService', () => {
     vi.useRealTimers();
   });
 
-  it('signs a token that verifies back to the same userId', async () => {
+  it('signs a token that verifies back to the same userId, with its issue date', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-25T10:00:00.700Z'));
+
     await expect(
       service.verify(service.sign({ userId: USER_ID })),
     ).resolves.toEqual({
       userId: USER_ID,
+      issuedAt: new Date('2026-11-25T10:00:00Z'),
     });
   });
 
@@ -76,7 +80,9 @@ describe('AccessTokenService', () => {
     vi.useFakeTimers();
     const token = service.sign({ userId: USER_ID });
     vi.advanceTimersByTime(15 * 60 * 1000 - 1000);
-    await expect(service.verify(token)).resolves.toEqual({ userId: USER_ID });
+    await expect(service.verify(token)).resolves.toMatchObject({
+      userId: USER_ID,
+    });
   });
 
   it('refuses a token signed with another secret', async () => {
@@ -143,6 +149,8 @@ describe('AccessTokenService', () => {
     ['without sub', { sub: undefined }],
     ['with an empty sub', { sub: '' }],
     ['with a non-string sub', { sub: 42 }],
+    ['without iat', { iat: undefined }],
+    ['with a non-numeric iat', { iat: 'now' }],
   ])('refuses a correctly signed token %s', async (_, override) => {
     const token = handMade(
       { alg: 'HS256', typ: 'JWT' },
