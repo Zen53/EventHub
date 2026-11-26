@@ -62,7 +62,7 @@ export class UsersService implements OnModuleInit {
   ): Promise<UserRow> {
     const changes: UserProfileChanges = {};
     if (email !== undefined) {
-      await this.verifyCurrentPassword(id, currentPassword);
+      await this.verifyPassword(id, currentPassword);
       changes.email = normalizeEmail(email);
     }
     if (firstName !== undefined) {
@@ -96,7 +96,7 @@ export class UsersService implements OnModuleInit {
     id: string,
     { currentPassword, newPassword }: ChangePasswordBody,
   ): Promise<UserRow> {
-    await this.verifyCurrentPassword(id, currentPassword);
+    await this.verifyPassword(id, currentPassword);
     const passwordHash = await this.hasher.hash(newPassword);
     const row = await this.repository.updatePassword(id, passwordHash);
     if (!row) {
@@ -113,6 +113,13 @@ export class UsersService implements OnModuleInit {
     return this.repository.incrementTokenVersion(id);
   }
 
+  /** Anonymise le compte et invalide toutes ses sessions (EV-83). */
+  async anonymize(id: string): Promise<void> {
+    if (!(await this.repository.anonymize(id))) {
+      throw new AppError('UNAUTHORIZED');
+    }
+  }
+
   async verifyCredentials(
     email: string,
     password: string,
@@ -126,7 +133,8 @@ export class UsersService implements OnModuleInit {
     return valid ? user : null;
   }
 
-  private async verifyCurrentPassword(
+  /** Vérifie le mot de passe d'un utilisateur connecté (403 WRONG_PASSWORD s'il est faux). */
+  async verifyPassword(
     id: string,
     currentPassword: string | undefined,
   ): Promise<void> {

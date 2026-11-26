@@ -10,6 +10,7 @@ const row: UserRow = {
   phone: null,
   passwordHash: '$argon2id$secret',
   tokenVersion: 0,
+  deletedAt: null,
   createdAt: new Date('2026-11-13T10:00:00Z'),
   updatedAt: new Date('2026-11-14T08:30:00Z'),
 };

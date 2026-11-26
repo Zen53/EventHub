@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { type Database, InjectDatabase } from '../../core/database/index.js';
 import { type NewUserRow, type UserRow, users } from './users.schema.js';
 
@@ -43,7 +43,7 @@ export class UsersRepository {
     const [row] = await this.db
       .select()
       .from(users)
-      .where(eq(users.email, email))
+      .where(and(eq(users.email, email), isNull(users.deletedAt)))
       .limit(1);
     return row ?? null;
   }
@@ -52,7 +52,7 @@ export class UsersRepository {
     const [row] = await this.db
       .select()
       .from(users)
-      .where(eq(users.id, id))
+      .where(activeUser(id))
       .limit(1);
     return row ?? null;
   }
@@ -64,7 +64,7 @@ export class UsersRepository {
     const [row] = await this.db
       .update(users)
       .set(changes)
-      .where(eq(users.id, id))
+      .where(activeUser(id))
       .returning();
     return row ?? null;
   }
@@ -74,7 +74,7 @@ export class UsersRepository {
     const [row] = await this.db
       .update(users)
       .set({ tokenVersion: nextTokenVersion })
-      .where(eq(users.id, id))
+      .where(activeUser(id))
       .returning({ tokenVersion: users.tokenVersion });
     return row?.tokenVersion ?? null;
   }
@@ -87,11 +87,45 @@ export class UsersRepository {
     const [row] = await this.db
       .update(users)
       .set({ passwordHash, tokenVersion: nextTokenVersion })
-      .where(eq(users.id, id))
+      .where(activeUser(id))
       .returning();
     return row ?? null;
   }
+
+  /**
+   * Anonymise le compte (EV-83) au lieu d'effacer la ligne, pour que ses
+   * événements passés gardent un organisateur valide. L'email d'origine est
+   * libéré, le mot de passe effacé, et toutes les sessions sont invalidées.
+   * Renvoie false si le compte n'existe pas ou est déjà supprimé.
+   */
+  async anonymize(id: string): Promise<boolean> {
+    const rows = await this.db
+      .update(users)
+      .set({
+        email: anonymizedEmail(id),
+        firstName: ANONYMOUS_FIRST_NAME,
+        lastName: ANONYMOUS_LAST_NAME,
+        phone: null,
+        passwordHash: ERASED_PASSWORD_HASH,
+        tokenVersion: nextTokenVersion,
+        deletedAt: sql`now()`,
+      })
+      .where(activeUser(id))
+      .returning({ id: users.id });
+    return rows.length > 0;
+  }
 }
+
+/** Unique par compte : libère l'email d'origine sans violer la contrainte d'unicité. */
+export const anonymizedEmail = (id: string) => `deleted-${id}@eventhub.invalid`;
+export const ANONYMOUS_FIRST_NAME = 'Utilisateur';
+export const ANONYMOUS_LAST_NAME = 'supprimé';
+/** Aucun mot de passe ne correspond à un hash vide : argon2 le refuse. */
+export const ERASED_PASSWORD_HASH = '';
+
+// Un compte supprimé est invisible : ni lecture, ni écriture, ni connexion (EV-81).
+const activeUser = (id: string) =>
+  and(eq(users.id, id), isNull(users.deletedAt));
 
 // Incrément atomique côté base : deux révocations simultanées ne se perdent pas.
 const nextTokenVersion = sql`${users.tokenVersion} + 1`;

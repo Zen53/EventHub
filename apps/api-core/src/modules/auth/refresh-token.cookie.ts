@@ -35,3 +35,12 @@ export const setRefreshTokenCookieHeader = {
     schema: { type: 'string' as const },
   },
 };
+
+/** En-tête `Set-Cookie` documenté dans OpenAPI par les routes qui suppriment le refresh token. */
+export const clearRefreshTokenCookieHeader = {
+  'Set-Cookie': {
+    description:
+      'Suppression du cookie `refreshToken` (`Path=/auth`, date d’expiration passée).',
+    schema: { type: 'string' as const },
+  },
+};

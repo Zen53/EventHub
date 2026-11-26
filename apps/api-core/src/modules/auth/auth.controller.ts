@@ -29,16 +29,9 @@ import {
   clearRefreshTokenCookie,
   REFRESH_TOKEN_COOKIE,
   setRefreshTokenCookie,
+  clearRefreshTokenCookieHeader,
   setRefreshTokenCookieHeader,
 } from './refresh-token.cookie.js';
-
-const clearRefreshTokenCookieHeader = {
-  'Set-Cookie': {
-    description:
-      'Suppression du cookie `refreshToken` (`Path=/auth`, date d’expiration passée).',
-    schema: { type: 'string' as const },
-  },
-};
 
 @ApiTags('Auth')
 @Controller('auth')

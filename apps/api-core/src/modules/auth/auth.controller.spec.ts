@@ -28,6 +28,7 @@ const row: UserRow = {
   phone: '+33612345678',
   passwordHash: 'stored-hash',
   tokenVersion: 0,
+  deletedAt: null,
   createdAt: new Date('2026-11-13T10:00:00Z'),
   updatedAt: new Date('2026-11-13T10:00:00Z'),
 };

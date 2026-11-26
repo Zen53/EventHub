@@ -116,3 +116,15 @@ export const changePasswordBodySchema = z.strictObject(
 );
 
 export type ChangePasswordBody = z.infer<typeof changePasswordBodySchema>;
+
+export const deleteMeBodySchema = z.strictObject(
+  {
+    password: z
+      .string({ error: 'Le mot de passe est obligatoire.' })
+      .min(1, 'Le mot de passe est obligatoire.')
+      .max(72, 'Le mot de passe doit contenir au plus 72 caractères.'),
+  },
+  { error: strictBodyError },
+);
+
+export type DeleteMeBody = z.infer<typeof deleteMeBodySchema>;

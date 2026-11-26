@@ -73,6 +73,18 @@ export class EventsRepository {
     return { rows, total };
   }
 
+  /** Nombre d'événements publiés et à venir de l'organisateur. */
+  countUpcomingPublished(organizerId: string): Promise<number> {
+    return this.db.$count(
+      events,
+      and(
+        eq(events.organizerId, organizerId),
+        eq(events.status, 'published'),
+        gt(events.startsAt, sql`now()`),
+      ),
+    );
+  }
+
   async findById(id: string): Promise<EventDetailRow | null> {
     const [row] = await this.db
       .select(detailColumns)
