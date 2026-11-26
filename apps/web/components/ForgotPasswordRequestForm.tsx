@@ -1,18 +1,26 @@
 "use client";
 
-import { emailSchema } from "@eventhub/schemas";
+import {
+  errorResponseSchema,
+  forgotPasswordBodySchema,
+} from "@eventhub/schemas";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
+
+const genericError = "Envoi impossible pour le moment.";
 
 export default function ForgotPasswordRequestForm() {
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState<string>();
+  const [formError, setFormError] = useState<string>();
+  const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setFormError(undefined);
 
-    const result = emailSchema.safeParse(email);
+    const result = forgotPasswordBodySchema.safeParse({ email });
     if (!result.success) {
       setEmailError(
         result.error.issues[0]?.message ?? "L'email n'est pas valide.",
@@ -21,8 +29,42 @@ export default function ForgotPasswordRequestForm() {
     }
 
     setEmailError(undefined);
-    setEmail(result.data);
-    setSent(true);
+    setEmail(result.data.email);
+    setSubmitting(true);
+
+    try {
+      const response = await fetch("/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(result.data),
+      });
+
+      if (response.status === 204) {
+        setSent(true);
+        return;
+      }
+
+      const payload = errorResponseSchema.safeParse(await response.json());
+      if (!payload.success) {
+        setFormError(genericError);
+        return;
+      }
+
+      const { code, message, details } = payload.data.error;
+      if (code === "VALIDATION_ERROR") {
+        const emailDetail = details?.find((detail) => detail.field === "email");
+        if (emailDetail) {
+          setEmailError(emailDetail.message);
+          return;
+        }
+      }
+
+      setFormError(message || genericError);
+    } catch {
+      setFormError(genericError);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   if (sent) {
@@ -76,7 +118,7 @@ export default function ForgotPasswordRequestForm() {
         </p>
       </div>
 
-      <label className="flex flex-col gap-1.5 text-sm my-6" htmlFor="email">
+      <label className="my-6 flex flex-col gap-1.5 text-sm" htmlFor="email">
         <span className="font-medium text-[#1a120e]">Email</span>
         <input
           id="email"
@@ -88,6 +130,7 @@ export default function ForgotPasswordRequestForm() {
           onChange={(event) => {
             setEmail(event.target.value);
             setEmailError(undefined);
+            setFormError(undefined);
           }}
           className={`h-12 rounded-xl border bg-white px-4 text-[#1a120e] outline-none transition focus:border-[#e24a1b] ${
             emailError ? "border-[#c2410c]" : "border-[#e6dfd4]"
@@ -98,11 +141,21 @@ export default function ForgotPasswordRequestForm() {
         ) : null}
       </label>
 
+      {formError ? (
+        <p
+          role="alert"
+          className="rounded-2xl bg-[#fdecea] px-4 py-3 text-sm text-[#c2410c]"
+        >
+          {formError}
+        </p>
+      ) : null}
+
       <button
         type="submit"
-        className="mt-1 h-12 rounded-xl bg-[#e24a1b] text-sm font-semibold text-white transition hover:bg-[#c73d14]"
+        disabled={submitting}
+        className="mt-1 h-12 rounded-xl bg-[#e24a1b] text-sm font-semibold text-white transition hover:bg-[#c73d14] disabled:opacity-60"
       >
-        Envoyer le lien
+        {submitting ? "Envoi…" : "Envoyer le lien"}
       </button>
 
       <p className="text-center text-sm text-[#6d6258]">
