@@ -6,7 +6,7 @@ import {
   type ErrorCode,
   errorResponseSchema,
 } from "@eventhub/schemas";
-import { useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 
 type Field = "currentPassword" | "newPassword" | "confirmPassword";
 type Errors = Partial<Record<Field, string>>;
@@ -22,7 +22,6 @@ const isField = (value: unknown): value is Field =>
 
 const genericError = "Impossible de changer ton mot de passe pour le moment.";
 
-/** Messages affichés pour les codes que PATCH /me/password peut renvoyer. */
 const errorMessages: Partial<Record<ErrorCode, string>> = {
   UNAUTHORIZED: "Ta session a expiré. Reconnecte-toi pour continuer.",
 };
@@ -35,6 +34,9 @@ const emptyValues: Record<Field, string> = {
 
 /** Changement du mot de passe depuis le profil, avec PATCH /me/password (EV-54, EV-55). */
 export default function ChangePasswordForm() {
+  const titleId = useId();
+  const descriptionId = useId();
+  const firstFieldRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState(emptyValues);
   const [errors, setErrors] = useState<Errors>({});
@@ -43,11 +45,34 @@ export default function ChangePasswordForm() {
   const [done, setDone] = useState(false);
 
   function close() {
+    if (submitting) return;
     setOpen(false);
     setValues(emptyValues);
     setErrors({});
     setFormError(undefined);
   }
+
+  useEffect(() => {
+    if (!open) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    firstFieldRef.current?.focus();
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape" || submitting) return;
+      setOpen(false);
+      setValues(emptyValues);
+      setErrors({});
+      setFormError(undefined);
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open, submitting]);
 
   function validate(): Errors {
     const next: Errors = {};
@@ -67,7 +92,10 @@ export default function ChangePasswordForm() {
     }
     if (!values.confirmPassword) {
       next.confirmPassword = "Confirme ton nouveau mot de passe.";
-    } else if (!next.newPassword && values.confirmPassword !== values.newPassword) {
+    } else if (
+      !next.newPassword &&
+      values.confirmPassword !== values.newPassword
+    ) {
       next.confirmPassword = "Les mots de passe ne correspondent pas.";
     }
     return next;
@@ -111,7 +139,9 @@ export default function ChangePasswordForm() {
 
       const { code, details } = payload.data.error;
       if (code === "WRONG_PASSWORD") {
-        setErrors({ currentPassword: "Ton mot de passe actuel est incorrect." });
+        setErrors({
+          currentPassword: "Ton mot de passe actuel est incorrect.",
+        });
         return;
       }
 
@@ -134,14 +164,56 @@ export default function ChangePasswordForm() {
     }
   }
 
-  if (!open) {
+  function field(
+    name: Field,
+    label: string,
+    autoComplete: string,
+    hint?: string,
+  ) {
     return (
-      <div className="flex flex-col gap-3">
+      <label className="flex flex-col gap-1.5 text-sm" htmlFor={name}>
+        <span className="font-medium text-[#1a120e]">{label}</span>
+        <input
+          ref={name === "currentPassword" ? firstFieldRef : undefined}
+          id={name}
+          name={name}
+          type="password"
+          autoComplete={autoComplete}
+          value={values[name]}
+          aria-invalid={errors[name] ? true : undefined}
+          aria-describedby={
+            errors[name] || hint ? `${name}-message` : undefined
+          }
+          onChange={(event) => {
+            setValues((current) => ({
+              ...current,
+              [name]: event.target.value,
+            }));
+            setErrors((current) => ({ ...current, [name]: undefined }));
+            setFormError(undefined);
+          }}
+          className={`h-12 rounded-xl border bg-white px-4 text-[#1a120e] outline-none transition focus:border-[#e24a1b] ${
+            errors[name] ? "border-[#c2410c]" : "border-[#e6dfd4]"
+          }`}
+        />
+        {errors[name] ? (
+          <span id={`${name}-message`} className="text-xs text-[#c2410c]">
+            {errors[name]}
+          </span>
+        ) : hint ? (
+          <span id={`${name}-message`} className="text-xs text-[#6d6258]">
+            {hint}
+          </span>
+        ) : null}
+      </label>
+    );
+  }
+
+  return (
+    <>
+      <div className="flex flex-col items-start gap-4 lg:justify-self-start">
         {done ? (
-          <p
-            role="status"
-            className="rounded-2xl bg-[#e8f5ec] px-4 py-3 text-sm text-[#1f6b3a]"
-          >
+          <p role="status" className="text-sm font-medium text-[#1f6b3a]">
             Ton mot de passe a été changé. Tes autres appareils seront
             déconnectés.
           </p>
@@ -152,100 +224,95 @@ export default function ChangePasswordForm() {
             setDone(false);
             setOpen(true);
           }}
-          className="h-12 rounded-xl border border-[#e6dfd4] bg-white text-sm font-semibold text-[#1a120e] transition hover:border-[#e24a1b]"
+          className="h-12 rounded-xl border border-[#1a120e]/15 bg-transparent px-5 text-sm font-semibold text-[#1a120e] transition hover:border-[#e24a1b]"
         >
           Changer mon mot de passe
         </button>
       </div>
-    );
-  }
 
-  const input = (
-    field: Field,
-    label: string,
-    autoComplete: string,
-    hint?: string,
-  ) => (
-    <label className="flex flex-col gap-1.5 text-sm" htmlFor={field}>
-      <span className="font-medium text-[#1a120e]">{label}</span>
-      <input
-        id={field}
-        name={field}
-        type="password"
-        autoComplete={autoComplete}
-        value={values[field]}
-        aria-invalid={errors[field] ? true : undefined}
-        aria-describedby={errors[field] || hint ? `${field}-message` : undefined}
-        onChange={(event) => {
-          setValues((current) => ({ ...current, [field]: event.target.value }));
-          setErrors((current) => ({ ...current, [field]: undefined }));
-          setFormError(undefined);
-        }}
-        className={`h-12 rounded-xl border bg-white px-4 text-[#1a120e] outline-none transition focus:border-[#e24a1b] ${
-          errors[field] ? "border-[#c2410c]" : "border-[#e6dfd4]"
-        }`}
-      />
-      {errors[field] ? (
-        <span id={`${field}-message`} className="text-xs text-[#c2410c]">
-          {errors[field]}
-        </span>
-      ) : hint ? (
-        <span id={`${field}-message`} className="text-xs text-[#6d6258]">
-          {hint}
-        </span>
+      {open ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
+          <button
+            type="button"
+            aria-label="Fermer"
+            className="absolute inset-0 bg-[#1a120e]/55 backdrop-blur-[2px] transition"
+            onClick={close}
+          />
+
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            aria-describedby={descriptionId}
+            className="relative z-10 w-full max-w-md rounded-2xl border border-[#e6dfd4] bg-[#f6f1e7] p-6 shadow-[0_24px_80px_rgba(26,18,14,0.28)] sm:p-7"
+          >
+            <form
+              onSubmit={onSubmit}
+              noValidate
+              className="flex flex-col gap-4"
+            >
+              <div>
+                <p className="text-xs font-medium tracking-[0.28em] text-[#e24a1b]">
+                  SÉCURITÉ
+                </p>
+                <h2
+                  id={titleId}
+                  className="mt-2 text-2xl font-semibold tracking-tight text-[#1a120e]"
+                >
+                  Changer mon mot de passe
+                </h2>
+                <p
+                  id={descriptionId}
+                  className="mt-2 text-sm leading-6 text-[#6d6258]"
+                >
+                  Choisis un nouveau mot de passe. Tes autres sessions seront
+                  déconnectées.
+                </p>
+              </div>
+
+              {field("currentPassword", "Mot de passe actuel", "current-password")}
+              {field(
+                "newPassword",
+                "Nouveau mot de passe",
+                "new-password",
+                "8 caractères minimum, une lettre et un chiffre.",
+              )}
+              {field(
+                "confirmPassword",
+                "Confirmer le nouveau mot de passe",
+                "new-password",
+              )}
+
+              {formError ? (
+                <p
+                  role="alert"
+                  className="rounded-2xl bg-[#fdecea] px-4 py-3 text-sm text-[#c2410c]"
+                >
+                  {formError}
+                </p>
+              ) : null}
+
+              <div className="flex flex-col-reverse gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={close}
+                  disabled={submitting}
+                  className="h-12 flex-1 rounded-xl border border-[#e6dfd4] bg-white text-sm font-semibold text-[#1a120e] transition hover:border-[#e24a1b] disabled:opacity-60"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="h-12 flex-1 rounded-xl bg-[#e24a1b] text-sm font-semibold text-white transition hover:bg-[#c73d14] disabled:opacity-60"
+                >
+                  {submitting ? "Enregistrement…" : "Enregistrer"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       ) : null}
-    </label>
-  );
-
-  return (
-    <form
-      onSubmit={onSubmit}
-      noValidate
-      aria-labelledby="change-password-title"
-      className="flex flex-col gap-4 rounded-2xl border border-[#e6dfd4] bg-white px-5 py-5"
-    >
-      <h2
-        id="change-password-title"
-        className="text-lg font-semibold tracking-tight text-[#1a120e]"
-      >
-        Changer mon mot de passe
-      </h2>
-
-      {input("currentPassword", "Mot de passe actuel", "current-password")}
-      {input(
-        "newPassword",
-        "Nouveau mot de passe",
-        "new-password",
-        "8 caractères minimum, une lettre et un chiffre.",
-      )}
-      {input("confirmPassword", "Confirmer le nouveau mot de passe", "new-password")}
-
-      {formError ? (
-        <p
-          role="alert"
-          className="rounded-2xl bg-[#fdecea] px-4 py-3 text-sm text-[#c2410c]"
-        >
-          {formError}
-        </p>
-      ) : null}
-
-      <div className="flex gap-3">
-        <button
-          type="button"
-          onClick={close}
-          disabled={submitting}
-          className="h-12 flex-1 rounded-xl border border-[#e6dfd4] bg-white text-sm font-semibold text-[#1a120e] transition hover:border-[#e24a1b] disabled:opacity-60"
-        >
-          Annuler
-        </button>
-        <button
-          type="submit"
-          disabled={submitting}
-          className="h-12 flex-1 rounded-xl bg-[#e24a1b] text-sm font-semibold text-white transition hover:bg-[#c73d14] disabled:opacity-60"
-        >
-          {submitting ? "Enregistrement…" : "Enregistrer"}
-        </button>
-      </div>
-    </form>
+    </>
   );
 }
