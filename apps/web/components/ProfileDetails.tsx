@@ -8,7 +8,14 @@ import {
   type User,
 } from "@eventhub/schemas";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+  type RefObject,
+} from "react";
 
 const loadError = "Impossible de charger ton profil.";
 const saveError = "Impossible d'enregistrer tes informations pour le moment.";
@@ -80,6 +87,9 @@ function valuesFromUser(user: User): FormValues {
 /** Profil connecté : lecture + mode édition (EV-36) branché sur PATCH /me (EV-37). */
 export default function ProfileDetails() {
   const router = useRouter();
+  const titleId = useId();
+  const descriptionId = useId();
+  const firstFieldRef = useRef<HTMLInputElement>(null);
   const [user, setUser] = useState<User>();
   const [editing, setEditing] = useState(false);
   const [values, setValues] = useState<FormValues>(emptyValues);
@@ -127,11 +137,34 @@ export default function ProfileDetails() {
   }
 
   function cancelEditing() {
+    if (submitting) return;
     if (user) setValues(valuesFromUser(user));
     setErrors({});
     setFormError(undefined);
     setEditing(false);
   }
+
+  useEffect(() => {
+    if (!editing) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    firstFieldRef.current?.focus();
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape" || submitting) return;
+      if (user) setValues(valuesFromUser(user));
+      setErrors({});
+      setFormError(undefined);
+      setEditing(false);
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [editing, submitting, user]);
 
   async function onLogout() {
     await logout();
@@ -240,167 +273,222 @@ export default function ProfileDetails() {
     }
   }
 
+  const initials = user
+    ? `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`.toUpperCase()
+    : "EH";
+
   return (
-    <section className="flex flex-col gap-5">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-medium tracking-[0.28em] text-[#e24a1b]">
-            MON PROFIL
-          </p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight">
-            {user ? `${user.firstName} ${user.lastName}` : "Mon profil"}
-          </h1>
+    <section>
+      <header className="relative overflow-hidden bg-[#1a120e] text-[#f6f1e7]">
+        <div className="pointer-events-none absolute -right-16 top-[-20%] h-[28rem] w-[28rem] rounded-full bg-[#e24a1b]/28 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 left-[10%] h-64 w-64 rounded-full bg-[#f3d7a1]/18 blur-3xl" />
+
+        <div className="relative mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-14 sm:px-12 sm:py-20 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex min-w-0 items-start gap-5 sm:gap-6">
+            <div
+              aria-hidden="true"
+              className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-[#f6f1e7] text-xl font-semibold tracking-wide text-[#1a120e] sm:h-24 sm:w-24 sm:text-2xl"
+            >
+              {initials}
+            </div>
+            <div className="min-w-0 pt-1">
+              <p className="text-xs font-medium tracking-[0.35em] text-[#f3d7a1]">
+                MON PROFIL
+              </p>
+              <div className="mt-1 h-px w-14 bg-[#e24a1b]" />
+              <h1 className="mt-4 text-4xl font-semibold tracking-tight sm:text-6xl sm:leading-[1.05]">
+                {user ? `${user.firstName} ${user.lastName}` : "Mon profil"}
+              </h1>
+              {user ? (
+                <p className="mt-3 text-base text-[#f6f1e7]/70">
+                  Membre depuis le {formatMemberSince(user.createdAt)}
+                </p>
+              ) : null}
+            </div>
+          </div>
+
           {user ? (
-            <p className="mt-1 text-sm text-[#6d6258]">
-              Membre depuis le {formatMemberSince(user.createdAt)}
-            </p>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={startEditing}
+                className="h-12 rounded-xl bg-[#e24a1b] px-5 text-sm font-semibold text-white transition hover:bg-[#c73d14]"
+              >
+                Modifier mon profil
+              </button>
+              <button
+                type="button"
+                onClick={onLogout}
+                className="h-12 rounded-xl border border-white/20 px-5 text-sm font-semibold text-[#f6f1e7] transition hover:border-[#e24a1b] hover:bg-[#e24a1b]"
+              >
+                Se déconnecter
+              </button>
+            </div>
           ) : null}
         </div>
-        {user && !editing ? (
-          <button
-            type="button"
-            onClick={startEditing}
-            className="mt-1 shrink-0 rounded-xl border border-[#e6dfd4] bg-white px-4 py-2 text-sm font-semibold text-[#1a120e] transition hover:border-[#e24a1b]"
-          >
-            Modifier
-          </button>
+      </header>
+
+      <div className="mx-auto w-full max-w-6xl px-6 py-12 sm:px-12 sm:py-16">
+        {success ? (
+          <p role="status" className="mb-8 text-sm font-medium text-[#1f6b3a]">
+            {success}
+          </p>
         ) : null}
+
+        {error ? (
+          <p role="alert" className="mb-8 text-sm text-[#c2410c]">
+            {error}
+          </p>
+        ) : !user ? (
+          <p role="status" className="text-sm text-[#6d6258]">
+            Chargement…
+          </p>
+        ) : (
+          <div>
+            <div>
+              <p className="text-xs font-medium tracking-[0.28em] text-[#e24a1b]">
+                COORDONNÉES
+              </p>
+              <h2 className="mt-2 text-3xl font-semibold tracking-tight">
+                Informations personnelles
+              </h2>
+            </div>
+
+            <dl className="mt-10 grid gap-x-12 gap-y-0 sm:grid-cols-2">
+              <InfoRow label="Prénom" value={user.firstName} />
+              <InfoRow label="Nom" value={user.lastName} />
+              <InfoRow label="Email" value={user.email} />
+              <InfoRow
+                label="Téléphone"
+                value={user.phone ? formatPhone(user.phone) : "Non renseigné"}
+                muted={!user.phone}
+              />
+            </dl>
+          </div>
+        )}
       </div>
 
-      {success ? (
-        <p
-          role="status"
-          className="rounded-2xl bg-[#e8f5ec] px-4 py-3 text-sm text-[#1f6b3a]"
-        >
-          {success}
-        </p>
-      ) : null}
+      {editing && user ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
+          <button
+            type="button"
+            aria-label="Fermer"
+            className="absolute inset-0 bg-[#1a120e]/55 backdrop-blur-[2px] transition"
+            onClick={cancelEditing}
+          />
 
-      {error ? (
-        <p
-          role="alert"
-          className="rounded-2xl bg-[#fdecea] px-4 py-3 text-sm text-[#c2410c]"
-        >
-          {error}
-        </p>
-      ) : !user ? (
-        <p role="status" className="text-sm text-[#6d6258]">
-          Chargement…
-        </p>
-      ) : editing ? (
-        <form
-          onSubmit={onSubmit}
-          noValidate
-          className="flex flex-col gap-4 rounded-2xl border border-[#e6dfd4] bg-white px-5 py-5"
-        >
-          <h2 className="text-lg font-semibold tracking-tight text-[#1a120e]">
-            Modifier mes informations
-          </h2>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            aria-describedby={descriptionId}
+            className="relative z-10 max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[#e6dfd4] bg-[#f6f1e7] p-6 shadow-[0_24px_80px_rgba(26,18,14,0.28)] sm:p-7"
+          >
+            <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
+              <div>
+                <p className="text-xs font-medium tracking-[0.28em] text-[#e24a1b]">
+                  ÉDITION
+                </p>
+                <h2
+                  id={titleId}
+                  className="mt-2 text-2xl font-semibold tracking-tight text-[#1a120e]"
+                >
+                  Modifier mon profil
+                </h2>
+                <p
+                  id={descriptionId}
+                  className="mt-2 text-sm leading-6 text-[#6d6258]"
+                >
+                  Mets à jour tes informations. Le mot de passe actuel est
+                  demandé seulement si tu changes d&apos;email.
+                </p>
+              </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field
-              id="firstName"
-              label="Prénom"
-              autoComplete="given-name"
-              value={values.firstName}
-              error={errors.firstName}
-              onChange={(value) => update("firstName", value)}
-            />
-            <Field
-              id="lastName"
-              label="Nom"
-              autoComplete="family-name"
-              value={values.lastName}
-              error={errors.lastName}
-              onChange={(value) => update("lastName", value)}
-            />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field
+                  id="firstName"
+                  label="Prénom"
+                  autoComplete="given-name"
+                  inputRef={firstFieldRef}
+                  value={values.firstName}
+                  error={errors.firstName}
+                  onChange={(value) => update("firstName", value)}
+                />
+                <Field
+                  id="lastName"
+                  label="Nom"
+                  autoComplete="family-name"
+                  value={values.lastName}
+                  error={errors.lastName}
+                  onChange={(value) => update("lastName", value)}
+                />
+              </div>
+
+              <Field
+                id="email"
+                label="Email"
+                type="email"
+                autoComplete="email"
+                value={values.email}
+                error={errors.email}
+                onChange={(value) => update("email", value)}
+              />
+
+              {emailChanged ? (
+                <Field
+                  id="currentPassword"
+                  label="Mot de passe actuel"
+                  type="password"
+                  autoComplete="current-password"
+                  hint="Requis pour confirmer le changement d'email."
+                  value={values.currentPassword}
+                  error={errors.currentPassword}
+                  onChange={(value) => update("currentPassword", value)}
+                />
+              ) : null}
+
+              <Field
+                id="phone"
+                label="Téléphone"
+                type="tel"
+                autoComplete="tel"
+                optional
+                placeholder="06 12 34 56 78"
+                hint="Un numéro français suffit. L'indicatif +33 est ajouté automatiquement."
+                value={values.phone}
+                error={errors.phone}
+                onChange={(value) => update("phone", value)}
+              />
+
+              {formError ? (
+                <p
+                  role="alert"
+                  className="rounded-2xl bg-[#fdecea] px-4 py-3 text-sm text-[#c2410c]"
+                >
+                  {formError}
+                </p>
+              ) : null}
+
+              <div className="flex flex-col-reverse gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={cancelEditing}
+                  disabled={submitting}
+                  className="h-12 flex-1 rounded-xl border border-[#e6dfd4] bg-white text-sm font-semibold text-[#1a120e] transition hover:border-[#e24a1b] disabled:opacity-60"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="h-12 flex-1 rounded-xl bg-[#e24a1b] text-sm font-semibold text-white transition hover:bg-[#c73d14] disabled:opacity-60"
+                >
+                  {submitting ? "Enregistrement…" : "Enregistrer"}
+                </button>
+              </div>
+            </form>
           </div>
-
-          <Field
-            id="email"
-            label="Email"
-            type="email"
-            autoComplete="email"
-            value={values.email}
-            error={errors.email}
-            onChange={(value) => update("email", value)}
-          />
-
-          {emailChanged ? (
-            <Field
-              id="currentPassword"
-              label="Mot de passe actuel"
-              type="password"
-              autoComplete="current-password"
-              hint="Requis pour confirmer le changement d'email."
-              value={values.currentPassword}
-              error={errors.currentPassword}
-              onChange={(value) => update("currentPassword", value)}
-            />
-          ) : null}
-
-          <Field
-            id="phone"
-            label="Téléphone"
-            type="tel"
-            autoComplete="tel"
-            optional
-            placeholder="06 12 34 56 78"
-            hint="Un numéro français suffit. L'indicatif +33 est ajouté automatiquement."
-            value={values.phone}
-            error={errors.phone}
-            onChange={(value) => update("phone", value)}
-          />
-
-          {formError ? (
-            <p
-              role="alert"
-              className="rounded-2xl bg-[#fdecea] px-4 py-3 text-sm text-[#c2410c]"
-            >
-              {formError}
-            </p>
-          ) : null}
-
-          <div className="flex gap-3 pt-1">
-            <button
-              type="button"
-              onClick={cancelEditing}
-              disabled={submitting}
-              className="h-12 flex-1 rounded-xl border border-[#e6dfd4] bg-white text-sm font-semibold text-[#1a120e] transition hover:border-[#e24a1b] disabled:opacity-60"
-            >
-              Annuler
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="h-12 flex-1 rounded-xl bg-[#e24a1b] text-sm font-semibold text-white transition hover:bg-[#c73d14] disabled:opacity-60"
-            >
-              {submitting ? "Enregistrement…" : "Enregistrer"}
-            </button>
-          </div>
-        </form>
-      ) : (
-        <dl className="overflow-hidden rounded-2xl border border-[#e6dfd4] bg-white text-sm">
-          <InfoRow label="Prénom" value={user.firstName} />
-          <InfoRow label="Nom" value={user.lastName} />
-          <InfoRow label="Email" value={user.email} />
-          <InfoRow
-            label="Téléphone"
-            value={user.phone ? formatPhone(user.phone) : "Non renseigné"}
-            muted={!user.phone}
-            last
-          />
-        </dl>
-      )}
-
-      {!editing ? (
-        <button
-          type="button"
-          onClick={onLogout}
-          className="h-12 rounded-xl border border-[#e6dfd4] bg-white text-sm font-semibold text-[#1a120e] transition hover:border-[#e24a1b]"
-        >
-          Se déconnecter
-        </button>
+        </div>
       ) : null}
     </section>
   );
@@ -410,21 +498,21 @@ function InfoRow({
   label,
   value,
   muted = false,
-  last = false,
 }: {
   label: string;
   value: string;
   muted?: boolean;
-  last?: boolean;
 }) {
   return (
-    <div
-      className={`grid grid-cols-[7.5rem_1fr] gap-x-4 px-5 py-3.5 sm:grid-cols-[9rem_1fr] ${
-        last ? "" : "border-b border-[#efe8dc]"
-      }`}
-    >
-      <dt className="text-[#6d6258]">{label}</dt>
-      <dd className={`min-w-0 break-all ${muted ? "text-[#6d6258]" : ""}`}>
+    <div className="border-t border-[#1a120e]/10 py-6">
+      <dt className="text-xs font-medium tracking-[0.2em] text-[#8a7d72]">
+        {label.toUpperCase()}
+      </dt>
+      <dd
+        className={`mt-2 min-w-0 break-all text-xl font-medium tracking-tight ${
+          muted ? "text-[#6d6258]" : "text-[#1a120e]"
+        }`}
+      >
         {value}
       </dd>
     </div>
@@ -442,6 +530,7 @@ function Field({
   value,
   error,
   onChange,
+  inputRef,
 }: {
   id: Field;
   label: string;
@@ -453,6 +542,7 @@ function Field({
   value: string;
   error?: string;
   onChange: (value: string) => void;
+  inputRef?: RefObject<HTMLInputElement | null>;
 }) {
   const messageId = `${id}-message`;
 
@@ -465,6 +555,7 @@ function Field({
         ) : null}
       </span>
       <input
+        ref={inputRef}
         id={id}
         name={id}
         type={type}
