@@ -2,6 +2,8 @@ import ChangePasswordForm from "@/components/ChangePasswordForm";
 import ProfileDetails from "@/components/ProfileDetails";
 import type { Metadata } from "next";
 
+export const instant = false;
+
 export const metadata: Metadata = {
   title: "Mon profil · EventHub",
   description: "Consulte les informations de ton compte EventHub.",
